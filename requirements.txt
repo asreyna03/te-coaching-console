@@ -1,0 +1,5 @@
+streamlit>=1.30
+pandas>=2.0
+# Only needed to re-sync the food database from Google Sheets:
+google-api-python-client
+google-auth
