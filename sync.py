@@ -24,8 +24,25 @@ def _load_sheet_id():
     v = os.environ.get("TE_SHEET_ID", "").strip()
     if v:
         return v
+    try:  # Streamlit Cloud secret, if deployed
+        import streamlit as st
+        s = str(st.secrets.get("te_sheet_id", "") or "").strip()
+        if s:
+            return s
+    except Exception:
+        pass
     f = SECRETS / "sheet_id.txt"
     return f.read_text().strip() if f.exists() else ""
+
+
+def _secret_google():
+    """Google OAuth fields from st.secrets['google'] on a deploy, else None."""
+    try:
+        import streamlit as st
+        g = st.secrets.get("google")
+        return dict(g) if g else None
+    except Exception:
+        return None
 
 
 SHEET_ID = _load_sheet_id()
@@ -35,13 +52,30 @@ FOOD_RANGES = ["Proteins", "Carbohydrates", "Fats", "FruitsVegetables",
 
 
 def _creds():
-    with open(TOKEN, "rb") as f:
-        c = pickle.load(f)
-    if c and getattr(c, "expired", False) and getattr(c, "refresh_token", None):
-        c.refresh(Request())
-        with open(TOKEN, "wb") as f:
-            pickle.dump(c, f)
-    return c
+    # Deployed (Streamlit Cloud): build creds from st.secrets['google'] if set.
+    g = _secret_google()
+    if g:
+        from google.oauth2.credentials import Credentials
+        c = Credentials(
+            token=g.get("token"), refresh_token=g.get("refresh_token"),
+            token_uri=g.get("token_uri", "https://oauth2.googleapis.com/token"),
+            client_id=g.get("client_id"), client_secret=g.get("client_secret"),
+            scopes=list(g.get("scopes", [])) or None)
+        if getattr(c, "expired", False) and c.refresh_token:
+            c.refresh(Request())
+        return c
+    # Local: the app's own pickled token in .secrets/.
+    if TOKEN.exists():
+        with open(TOKEN, "rb") as f:
+            c = pickle.load(f)
+        if c and getattr(c, "expired", False) and getattr(c, "refresh_token", None):
+            c.refresh(Request())
+            with open(TOKEN, "wb") as f:
+                pickle.dump(c, f)
+        return c
+    raise RuntimeError(
+        "Google Sheets sync isn't set up on this instance. The app works "
+        "without it — add credentials to enable syncing.")
 
 
 def _svc():

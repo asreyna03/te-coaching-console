@@ -171,10 +171,47 @@ hr, [data-testid="stDivider"]{ border-color:var(--line); }
 """
 
 
+def _configured_password():
+    """Shared access password for a deployed instance, from st.secrets or the
+    APP_PASSWORD env var. Empty string => no gate (local development)."""
+    import os
+    pw = ""
+    try:
+        pw = str(st.secrets.get("app_password", "") or "")
+    except Exception:
+        pw = ""
+    return (pw or os.environ.get("APP_PASSWORD", "")).strip()
+
+
+def require_auth():
+    """Password-gate the whole app whenever an access password is configured.
+    No-op locally (no password set), so `streamlit run` stays frictionless."""
+    pw = _configured_password()
+    if not pw or st.session_state.get("_authed"):
+        return
+    st.markdown(
+        '<div class="hero"><div class="hero-top">'
+        '<span class="mono acc">[ PRIVATE ]</span>'
+        '<span class="mono">T&amp;E · COACHING CONSOLE</span></div>'
+        '<h1>Train&amp;Eat<span class="ast">.</span></h1>'
+        '<div class="hero-sub">This console is private. Enter the access '
+        'password to continue.</div></div>', unsafe_allow_html=True)
+    with st.form("auth_gate"):
+        entered = st.text_input("Access password", type="password")
+        if st.form_submit_button("Enter", type="primary"):
+            if entered == pw:
+                st.session_state["_authed"] = True
+                st.rerun()
+            else:
+                st.error("Incorrect password.")
+    st.stop()
+
+
 def setup(page_title, icon="✳"):
     st.set_page_config(page_title=f"{page_title} · T&E", page_icon=icon,
                        layout="wide")
     st.markdown(CSS, unsafe_allow_html=True)
+    require_auth()
     with st.sidebar:
         st.markdown('<div class="brandmark">TRAIN&EAT<span class="d">.</span></div>'
                     '<div class="mono">[ COACHING CONSOLE ]</div>',
