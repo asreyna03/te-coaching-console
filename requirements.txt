@@ -1,5 +1,8 @@
 streamlit>=1.30
 pandas>=2.0
+altair>=5.0
+# Persistent client storage (Supabase Postgres) — active when DATABASE_URL is set:
+psycopg2-binary>=2.9
 # Only needed to re-sync the food database from Google Sheets:
 google-api-python-client
 google-auth

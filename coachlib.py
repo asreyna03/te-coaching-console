@@ -2,6 +2,8 @@
 import json
 from pathlib import Path
 
+import db  # Postgres persistence when DATABASE_URL is set; JSON fallback otherwise
+
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 FOODDB_PATH = DATA / "fooddb.json"
@@ -82,8 +84,10 @@ def load_supplements():
     return out
 
 
-# ---------------- client store (local JSON) ----------------
+# ---------------- client store (Postgres when configured, else local JSON) ----
 def load_clients():
+    if db.enabled():
+        return db.load_all()
     if CLIENTS_PATH.exists():
         with open(CLIENTS_PATH) as f:
             return json.load(f)
@@ -91,20 +95,38 @@ def load_clients():
 
 
 def save_clients(d):
+    if db.enabled():
+        for name, rec in d.items():
+            db.save_one(name, rec)
+        return
     CLIENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CLIENTS_PATH, "w") as f:
         json.dump(d, f, indent=2)
 
 
 def get_client(name):
+    if db.enabled():
+        return db.get_one(name)
     return load_clients().get(name, {})
 
 
 def upsert_client(name, patch):
-    clients = load_clients()
-    rec = clients.get(name, {})
+    rec = get_client(name)
     rec.update(patch)
     rec.setdefault("name", name)
-    clients[name] = rec
-    save_clients(clients)
+    if db.enabled():
+        db.save_one(name, rec)
+    else:
+        clients = load_clients()
+        clients[name] = rec
+        save_clients(clients)
     return rec
+
+
+def delete_client(name):
+    if db.enabled():
+        db.delete_one(name)
+        return
+    clients = load_clients()
+    clients.pop(name, None)
+    save_clients(clients)
