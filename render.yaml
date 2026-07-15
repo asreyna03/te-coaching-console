@@ -1,0 +1,14 @@
+# Render Blueprint — deploys the T&E Coaching Console as a FREE web service.
+# In Render:  New +  ->  Blueprint  ->  pick this repo (it auto-reads this file).
+# You'll be prompted to set APP_PASSWORD (the shared access password) — it is
+# intentionally NOT stored here since this repo is public.
+services:
+  - type: web
+    name: te-coaching-console
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: APP_PASSWORD
+        sync: false
