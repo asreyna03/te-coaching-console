@@ -140,10 +140,10 @@ def push_client(name):
                      t.get("fats", ""), t.get("carbs", "")])
     rows.append([])
     for dt, plan in rec.get("meal_plans", {}).items():
-        rows.append([f"MEAL PLAN — {dt}", "Meal", "Food", "Servings"])
+        rows.append([f"MEAL PLAN — {dt}", "Meal", "Food", "Amount", "Servings"])
         for r in plan:
             rows.append(["", r.get("Meal", ""), r.get("Food", ""),
-                         r.get("Servings", "")])
+                         r.get("Amount", ""), r.get("Servings", "")])
         rows.append([])
     wi = rec.get("weighins", [])
     if wi:
