@@ -259,15 +259,25 @@ def client_picker():
     with st.sidebar:
         st.markdown("### Active client")
         options = ["＋ New client…"] + names
-        cur = st.session_state.get("client")
-        idx = options.index(cur) if cur in options else (1 if names else 0)
-        choice = st.selectbox("client", options, index=idx,
+        # Keyed picker with stable identity (a keyless index=-driven selectbox
+        # changes widget identity between runs and drops the user's selection
+        # every other switch). Seed once, then let widget state own it.
+        pending = st.session_state.pop("client_pick_pending", None)
+        if pending in options:
+            st.session_state["client_pick"] = pending
+        if ("client_pick" not in st.session_state
+                or st.session_state["client_pick"] not in options):
+            cur = st.session_state.get("client")
+            st.session_state["client_pick"] = (
+                cur if cur in options else (options[1] if names else options[0]))
+        choice = st.selectbox("client", options, key="client_pick",
                               label_visibility="collapsed")
         if choice == "＋ New client…":
             newname = st.text_input("Name for new client")
             if st.button("Create client", width="stretch") and newname.strip():
                 cl.upsert_client(newname.strip(), {})
                 st.session_state["client"] = newname.strip()
+                st.session_state["client_pick_pending"] = newname.strip()
                 st.rerun()
             return None
         st.session_state["client"] = choice

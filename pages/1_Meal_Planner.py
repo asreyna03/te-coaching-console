@@ -13,8 +13,8 @@ FOODS = cl.all_food_names(cats)
 MEALS = ["Pre", "Intra", "Post", "Meal 1", "Meal 2", "Meal 3", "Meal 4", "Meal 5"]
 
 ui.hero("Meal Planner.",
-        "One row per food — amounts in grams, several foods per meal, "
-        "macros totalling live against target.",
+        "Build each meal from your database — several foods per meal, amounts "
+        "in grams, macros totalling live against target.",
         kicker="NUTRITION")
 
 if not active:
@@ -24,7 +24,49 @@ if not active:
 rec = cl.get_client(active)
 daytype = st.radio("Day type", ["Training Day", "Non-Training Day"],
                    horizontal=True)
-key = f"mealtbl::{active}::{daytype}"          # scopes ALL plan widget state
+plan_key = f"meal::{active}::{daytype}"
+
+# Keep drafts alive: Streamlit drops widget state for widgets that skip a run
+# (e.g. flipping day type unmounts the other day's inputs). Re-asserting the
+# keys of the non-rendered scopes preserves unsaved edits until Save/Reset.
+for _k in list(st.session_state.keys()):
+    _ks = str(_k)
+    if _ks.startswith("meal::") and not _ks.startswith(plan_key):
+        st.session_state[_k] = st.session_state[_k]
+
+# ---- saved plan, grouped by meal (back-compat with old {Meal,Food,Servings}) ----
+saved_rows = rec.get("meal_plans", {}).get(daytype) or []
+saved_by_meal = {}
+_missing_foods = []
+for r in saved_rows:
+    food = str(r.get("Food") or "").strip()
+    if not food:
+        continue
+    if food not in lookup:
+        _missing_foods.append(food)
+        continue
+    saved_by_meal.setdefault(r.get("Meal") or "Meal 1", []).append(r)
+
+
+def _row_amount(r, food):
+    """Amount for one saved row, converting old Servings-only rows."""
+    if r.get("Amount") not in (None, ""):
+        return cl._f(r["Amount"])
+    sv = (cl._f(r.get("Servings"))
+          if r.get("Servings") not in (None, "") else 1.0)
+    kind, qty, _ = cl.serving_info(lookup[food].get("serving", ""))
+    return sv * qty if kind in ("g", "ml") else sv
+
+
+def _saved_amount(meal, food):
+    """Previous amount for this food in this meal; duplicates are summed so
+    old plans with the same food twice in one meal keep their true total."""
+    matches = [r for r in saved_by_meal.get(meal, [])
+               if str(r.get("Food")) == food]
+    if not matches:
+        return None
+    return sum(_row_amount(r, food) for r in matches)
+
 
 # ---- targets (keyed per client+daytype so edits never leak across records) ----
 ui.label("DAILY TARGETS")
@@ -32,118 +74,76 @@ tgt = rec.get("targets", {}).get(daytype, {})
 d = 2500 if daytype == "Training Day" else 2200
 t1, t2, t3, t4 = st.columns(4)
 t_cal = t1.number_input("Calories", 0, value=int(tgt.get("cal", d)), step=10,
-                        key=f"{key}::t::cal")
+                        key=f"{plan_key}::t::cal")
 t_pro = t2.number_input("Protein (g)", 0, value=int(tgt.get("protein", 200)),
-                        step=5, key=f"{key}::t::protein")
+                        step=5, key=f"{plan_key}::t::protein")
 t_fat = t3.number_input("Fats (g)", 0, value=int(tgt.get("fats", 60)),
-                        step=5, key=f"{key}::t::fats")
+                        step=5, key=f"{plan_key}::t::fats")
 t_carb = t4.number_input("Carbs (g)", 0, value=int(tgt.get("carbs", 280)),
-                         step=5, key=f"{key}::t::carbs")
+                         step=5, key=f"{plan_key}::t::carbs")
 
+if _missing_foods:
+    st.caption("⚠️ Not in the food database anymore (excluded): " +
+               ", ".join(sorted(set(_missing_foods))))
 
-def _amount_of(row_dict):
-    """Amount for a saved row, converting old Servings-only rows."""
-    amt = row_dict.get("Amount")
-    if amt not in (None, ""):
-        return cl._f(amt)
-    sv = (cl._f(row_dict.get("Servings"))
-          if row_dict.get("Servings") not in (None, "") else 1.0)
-    food = str(row_dict.get("Food") or "").strip()
-    if food in lookup:
-        kind, qty, _ = cl.serving_info(lookup[food].get("serving", ""))
-        return sv * qty if kind in ("g", "ml") else sv
-    return sv
+# ---- meals in this day ----
+ui.label("MEALS IN THIS DAY")
+meal_options = MEALS + [m for m in saved_by_meal if m not in MEALS]
+default_meals = [m for m in meal_options if m in saved_by_meal] or ["Meal 1"]
+meals_sel = st.multiselect("Meals", meal_options, default=default_meals,
+                           key=f"{plan_key}::meals",
+                           label_visibility="collapsed")
 
-
-def _merged(base_df, editor_state):
-    """Apply a data_editor edit log onto its base dataframe."""
-    df = base_df.copy()
-    for i_str, changes in (editor_state.get("edited_rows") or {}).items():
-        i = int(i_str)
-        if i < len(df):
-            for c, v in changes.items():
-                if c in df.columns:
-                    df.iloc[i, df.columns.get_loc(c)] = v
-    dels = [i for i in (editor_state.get("deleted_rows") or []) if i < len(df)]
-    if dels:
-        df = df.drop(df.index[dels]).reset_index(drop=True)
-    for new in (editor_state.get("added_rows") or []):
-        df.loc[len(df)] = {c: new.get(c) for c in df.columns}
-    return df
-
-
-def _stash_draft(base_key, editor_key):
-    """on_change: snapshot the merged table so drafts survive daytype/client
-    toggles (widget state is dropped by Streamlit when a widget unmounts)."""
-    state = st.session_state.get(editor_key)
-    base = st.session_state.get(base_key)
-    if state is not None and base is not None:
-        st.session_state[f"{base_key}::draft"] = _merged(base, state)
-
-
-# ---- build the plan: one compact table ----
-ui.label("BUILD THE PLAN")
-st.caption("Add rows with the ＋ at the bottom. Several rows can share the same "
-           "meal. **Amount = grams** (drinks in ml, items like bagels by count).")
-
-editor_key = key + "::editor"
-draft_key = key + "::draft"
-# restore an unsaved draft after the editor unmounted (daytype/client toggle)
-if draft_key in st.session_state and editor_key not in st.session_state:
-    st.session_state[key] = st.session_state.pop(draft_key)
-if key not in st.session_state:
-    saved = rec.get("meal_plans", {}).get(daytype) or []
-    init = [{"Meal": r.get("Meal") or "Meal 1",
-             "Food": str(r.get("Food") or "").strip(),
-             "Amount": float(_amount_of(r))}
-            for r in saved if str(r.get("Food") or "").strip()]
-    st.session_state[key] = pd.DataFrame(
-        init or [{"Meal": "Meal 1", "Food": "", "Amount": None}])
-
-edited = st.data_editor(
-    st.session_state[key],
-    num_rows="dynamic", width="stretch", hide_index=True,
-    column_config={
-        "Meal": st.column_config.SelectboxColumn("Meal", options=MEALS,
-                                                 width="small"),
-        "Food": st.column_config.SelectboxColumn("Food", options=[""] + FOODS,
-                                                 width="large"),
-        "Amount": st.column_config.NumberColumn(
-            "Amount", min_value=0.0, step=5.0, format="%g",
-            help="grams · drinks in ml · items by count"),
-    },
-    key=editor_key,
-    on_change=_stash_draft, args=(key, editor_key),
-)
-
-# ---- compute ----
+# ---- per-meal builders ----
 rows = []
-for _, r in edited.iterrows():
-    food = str(r.get("Food") or "").strip()
-    if not food:
-        continue
-    item = lookup.get(food)
-    raw = r.get("Amount")
-    missing = raw is None or (isinstance(raw, float) and pd.isna(raw))
-    if item:
-        amt = cl.default_amount(item) if missing else cl._f(raw)
+for meal in [m for m in meal_options if m in meals_sel]:
+    st.markdown(f'<div class="mono ink" style="margin:18px 0 4px">'
+                f'[ {meal.upper()} ]</div>', unsafe_allow_html=True)
+    prev_foods = list(dict.fromkeys(
+        str(r.get("Food")) for r in saved_by_meal.get(meal, [])))
+    sel = st.multiselect(f"Foods in {meal}", FOODS, default=prev_foods,
+                         key=f"{plan_key}::{meal}::foods",
+                         placeholder="Add foods to this meal…",
+                         label_visibility="collapsed")
+
+    m_cal = m_pro = m_fat = m_carb = 0.0
+    for food in sel:
+        item = lookup[food]
+        kind, qty, unit = cl.serving_info(item.get("serving", ""))
+        prev_amt = _saved_amount(meal, food)
+        start = float(prev_amt) if prev_amt is not None else cl.default_amount(item)
+        c1, c2, c3 = st.columns([5, 2, 4])
+        amt = c2.number_input(
+            {"g": "grams", "ml": "ml"}.get(kind, "quantity"),
+            min_value=0.0, value=float(start),
+            step=5.0 if kind in ("g", "ml") else 0.5,
+            key=f"{plan_key}::{meal}::{food}::amt",
+            format="%g", label_visibility="collapsed")
         servings = cl.servings_from_amount(item, amt)
-        label = f"{food} {cl.amount_label(item, amt)}"
+        cal, pro, fat, carb = cl.macros_for(lookup, food, servings)
+        c1.markdown(f'**{food}** <span class="mono acc">'
+                    f'{cl.amount_label(item, amt)}</span>',
+                    unsafe_allow_html=True)
+        c3.caption(f"{round(cal)} cal · P {pro:.1f} · F {fat:.1f} · C {carb:.1f}")
+        rows.append({"Meal": meal, "Food": food, "Amount": amt,
+                     "Servings": round(servings, 4),
+                     "Label": f"{food} {cl.amount_label(item, amt)}",
+                     "Cal": round(cal), "Protein": round(pro, 1),
+                     "Fats": round(fat, 1), "Carbs": round(carb, 1)})
+        m_cal += cal; m_pro += pro; m_fat += fat; m_carb += carb
+    if sel:
+        st.caption(f"**{meal} subtotal** — {round(m_cal)} cal · "
+                   f"P {m_pro:.1f} · F {m_fat:.1f} · C {m_carb:.1f}")
     else:
-        amt = 0.0 if missing else cl._f(raw)
-        servings = 0.0
-        label = f"{food} (not in database)"
-    cal, pro, fat, carb = cl.macros_for(lookup, food, servings)
-    rows.append({"Meal": r.get("Meal") or "Meal 1", "Food": food,
-                 "Amount": amt, "Servings": round(servings, 4), "Label": label,
-                 "Cal": round(cal), "Protein": round(pro, 1),
-                 "Fats": round(fat, 1), "Carbs": round(carb, 1)})
+        st.caption("No foods yet — pick some in the box above.")
+
+res = pd.DataFrame(rows)
 
 # ---- day totals vs target ----
-tc = sum(r["Cal"] for r in rows)
-tp = round(sum(r["Protein"] for r in rows), 1)
-tf = round(sum(r["Fats"] for r in rows), 1)
-tk = round(sum(r["Carbs"] for r in rows), 1)
+tc = int(res["Cal"].sum()) if not res.empty else 0
+tp = round(res["Protein"].sum(), 1) if not res.empty else 0
+tf = round(res["Fats"].sum(), 1) if not res.empty else 0
+tk = round(res["Carbs"].sum(), 1) if not res.empty else 0
 
 ui.label("DAY TOTALS VS TARGET")
 m1, m2, m3, m4 = st.columns(4)
@@ -153,34 +153,21 @@ m3.metric("Fats", f"{tf:g} / {t_fat}g", f"{round(t_fat - tf, 1):g} left")
 m4.metric("Carbs", f"{tk:g} / {t_carb}g", f"{round(t_carb - tk, 1):g} left")
 if t_cal:
     st.progress(min(tc / t_cal, 1.0), text=f"{round(100*tc/t_cal)}% of calorie target")
+
 if tc > 0:
     pc, fc, cc = tp * 4, tf * 9, tk * 4
     st.caption(f"**Calorie split** — 🥩 Protein {round(100*pc/tc)}%  ·  "
                f"🥑 Fats {round(100*fc/tc)}%  ·  🍚 Carbs {round(100*cc/tc)}%")
 
-# ---- by meal: foods with grams in parentheses ----
-if rows:
+# ---- by-meal summary (foods with grams in parentheses) ----
+if not res.empty:
     ui.label("BY MEAL")
-    meals_present = list(dict.fromkeys(r["Meal"] for r in rows))
-    order = [m for m in MEALS if m in meals_present] + \
-            [m for m in meals_present if m not in MEALS]
-    for meal in order:
-        mr = [r for r in rows if r["Meal"] == meal]
-        mc = sum(r["Cal"] for r in mr)
-        mp = sum(r["Protein"] for r in mr)
-        mf = sum(r["Fats"] for r in mr)
-        mk = sum(r["Carbs"] for r in mr)
-        st.markdown(
-            f'**{meal}** — {round(mc)} cal · P {mp:.1f} · F {mf:.1f} · C {mk:.1f}'
-            f'<br><span style="color:#78736A">'
-            f'{"  +  ".join(r["Label"] for r in mr)}</span>',
-            unsafe_allow_html=True)
-    with st.expander("Show every food row"):
-        st.dataframe(pd.DataFrame(rows)[["Meal", "Food", "Amount", "Cal",
-                                         "Protein", "Fats", "Carbs"]],
-                     width="stretch", hide_index=True)
-else:
-    st.info("Add foods in the table above to start building the plan.")
+    grp = (res.groupby("Meal", sort=False)
+           .agg(Foods=("Label", lambda s: "  +  ".join(s)),
+                Cal=("Cal", "sum"), Protein=("Protein", "sum"),
+                Fats=("Fats", "sum"), Carbs=("Carbs", "sum"))
+           .reset_index())
+    st.dataframe(grp, width="stretch", hide_index=True)
 
 # ---- save / reset ----
 st.divider()
@@ -197,7 +184,7 @@ if b1.button("💾 Save this plan to client", type="primary"):
     st.toast(f"Saved {daytype} plan for {active} ✓")
 
 if b2.button("↺ Reset to last saved"):
-    for k in [k for k in st.session_state if str(k).startswith(key)]:
+    for k in [k for k in st.session_state if str(k).startswith(plan_key)]:
         del st.session_state[k]
     st.rerun()
 
