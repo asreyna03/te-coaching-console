@@ -70,6 +70,68 @@ def macros_for(lookup, food, servings):
     return (it["calories"] * s, it["protein"] * s, it["fats"] * s, it["carbs"] * s)
 
 
+# ---------------- serving interpretation (grams / ml / units) ----------------
+def serving_info(serving_str):
+    """Interpret a serving descriptor from the food DB.
+
+    Returns (kind, qty, unit):
+      '100' or '100g'  -> ('g', 100.0, 'g')     # sheet convention: bare number = grams
+      '500ml'          -> ('ml', 500.0, 'ml')
+      '1 Slice'        -> ('unit', 1.0, 'Slice')
+      '1'              -> ('unit', 1.0, '')      # ambiguous '1' = one item
+      ''               -> ('unit', 1.0, '')
+    """
+    import re
+    s = str(serving_str or "").strip()
+    if not s:
+        return ("unit", 1.0, "")
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)", s)
+    if m:
+        q = float(m.group(1))
+        # a bare '1' is "one item" (e.g. an egg), larger bare numbers are grams
+        return ("g", q, "g") if q > 1 else ("unit", q, "")
+    m = re.search(r"(\d+(?:\.\d+)?)\s*g(?:rams?)?\b", s, re.I)
+    if m:
+        return ("g", float(m.group(1)), "g")
+    m = re.search(r"(\d+(?:\.\d+)?)\s*ml\b", s, re.I)
+    if m:
+        return ("ml", float(m.group(1)), "ml")
+    m = re.match(r"(\d+(?:\.\d+)?)\s*(.+)$", s)
+    if m:
+        return ("unit", float(m.group(1)) or 1.0, m.group(2).strip())
+    return ("unit", 1.0, s)
+
+
+def amount_label(item, amount):
+    """Human label for a chosen amount: '(300g)', '(500ml)', '(3 Slices)', '(x2)'."""
+    kind, qty, unit = serving_info(item.get("serving", ""))
+    a = _f(amount)
+    fmt = f"{a:g}"
+    if kind in ("g", "ml"):
+        return f"({fmt}{kind})"
+    if qty != 1:                      # e.g. serving '2 Crackers' -> multiples of it
+        return f"({fmt} × {item.get('serving', '').strip()})"
+    if not unit:
+        return f"(x{fmt})"
+    u = unit if (a == 1 or unit.lower().endswith("s")) else unit + "s"
+    return f"({fmt} {u})"
+
+
+def servings_from_amount(item, amount):
+    """Convert an entered amount (grams / ml / qty) into DB 'servings' for macros."""
+    kind, qty, unit = serving_info(item.get("serving", ""))
+    a = _f(amount)
+    if kind in ("g", "ml") and qty > 0:
+        return a / qty
+    return a
+
+
+def default_amount(item):
+    """Sensible starting amount for a food: one full serving."""
+    kind, qty, unit = serving_info(item.get("serving", ""))
+    return qty if kind in ("g", "ml") else 1.0
+
+
 def load_supplements():
     with open(FOODDB_PATH) as f:
         raw = json.load(f)

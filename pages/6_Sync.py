@@ -39,7 +39,7 @@ with c1:
     if not active:
         st.info("Pick a client in the sidebar to push.")
     elif st.button(f"⬆️ Push “{active}” to sheet", type="primary",
-                   use_container_width=True):
+                   width="stretch"):
         try:
             import sync
             tab, n = sync.push_client(active)
@@ -58,7 +58,7 @@ with c2:
     if remote:
         pick = st.selectbox("Client tabs in sheet", remote,
                             label_visibility="collapsed")
-        if st.button(f"⬇️ Pull “{pick}” from sheet", use_container_width=True):
+        if st.button(f"⬇️ Pull “{pick}” from sheet", width="stretch"):
             try:
                 import sync
                 rec = sync.pull_client(pick)

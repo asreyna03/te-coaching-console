@@ -30,7 +30,7 @@ df = df[cols]
 
 st.markdown("#### 📅 Daily log")
 edited = st.data_editor(
-    df, num_rows="dynamic", use_container_width=True, hide_index=True,
+    df, num_rows="dynamic", width="stretch", hide_index=True,
     column_config={
         "Date": st.column_config.TextColumn("Date", help="e.g. 2026-07-01"),
         "Weight": st.column_config.NumberColumn("Weight (lbs)", step=0.1, format="%.1f"),

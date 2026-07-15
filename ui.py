@@ -265,7 +265,7 @@ def client_picker():
                               label_visibility="collapsed")
         if choice == "＋ New client…":
             newname = st.text_input("Name for new client")
-            if st.button("Create client", use_container_width=True) and newname.strip():
+            if st.button("Create client", width="stretch") and newname.strip():
                 cl.upsert_client(newname.strip(), {})
                 st.session_state["client"] = newname.strip()
                 st.rerun()
