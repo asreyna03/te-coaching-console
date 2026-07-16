@@ -7,7 +7,7 @@ import altair as alt
 import ui
 import coachlib as cl
 
-ui.setup("Weigh-ins", "⚖️")
+ui.setup("Weigh-ins", "✳")
 active = ui.client_picker()
 
 ui.hero("Weigh-ins.",
@@ -15,7 +15,7 @@ ui.hero("Weigh-ins.",
         kicker="TRACKING")
 
 if not active:
-    st.info("👈 Pick or create a client in the sidebar first.")
+    st.info("Pick or create a client in the sidebar to log weigh-ins.")
     st.stop()
 
 rec = cl.get_client(active)
@@ -28,7 +28,7 @@ for c in cols:
         df[c] = None
 df = df[cols]
 
-st.markdown("#### 📅 Daily log")
+ui.label("DAILY LOG")
 edited = st.data_editor(
     df, num_rows="dynamic", width="stretch", hide_index=True,
     column_config={
@@ -47,24 +47,34 @@ clean = clean[clean["Date"].astype(str).str.strip() != ""]
 # trend
 plot = clean.dropna(subset=["Weight"]).copy()
 if len(plot) >= 2:
-    st.markdown("#### 📈 Weight trend")
+    ui.label("WEIGHT TREND")
     plot["Weight"] = pd.to_numeric(plot["Weight"], errors="coerce")
     lo, hi = plot["Weight"].min(), plot["Weight"].max()
     pad = max((hi - lo) * 0.25, 1.0)
-    chart = (alt.Chart(plot).mark_line(point=True, color="#E5383B", strokeWidth=3)
-             .encode(
-                 x=alt.X("Date:N", title=None, sort=None),
-                 y=alt.Y("Weight:Q", title="Weight (lbs)",
-                         scale=alt.Scale(domain=[lo - pad, hi + pad])),
-                 tooltip=["Date", "Weight"])
-             .properties(height=300))
+    # On-brand editorial chart: ink line, accent points, muted mono axes, no frame.
+    base = alt.Chart(plot).encode(
+        x=alt.X("Date:N", title=None, sort=None,
+                axis=alt.Axis(labelAngle=0, labelColor="#78736A",
+                              domainColor="#DCD6C9", tickColor="#DCD6C9")),
+        y=alt.Y("Weight:Q", title="Weight (lbs)",
+                scale=alt.Scale(domain=[lo - pad, hi + pad]),
+                axis=alt.Axis(labelColor="#78736A", titleColor="#78736A",
+                              gridColor="#E4E0D6", domainColor="#DCD6C9",
+                              tickColor="#DCD6C9")),
+        tooltip=["Date", "Weight"])
+    chart = (base.mark_line(color="#17150F", strokeWidth=2.5)
+             + base.mark_point(color="#E4531F", size=66, filled=True))
+    chart = (chart.properties(height=300).configure_view(strokeWidth=0)
+             .configure_axis(labelFont="Space Mono", titleFont="Space Mono",
+                             labelFontSize=11, titleFontSize=11))
     st.altair_chart(chart, use_container_width=True)
+    delta = plot["Weight"].iloc[-1] - plot["Weight"].iloc[0]
     c1, c2, c3 = st.columns(3)
     c1.metric("Latest", f'{plot["Weight"].iloc[-1]:g} lbs')
-    c2.metric("Change", f'{plot["Weight"].iloc[-1]-plot["Weight"].iloc[0]:+.1f} lbs')
-    c3.metric("Avg", f'{plot["Weight"].mean():.1f} lbs')
+    c2.metric("Change since start", f'{delta:+.1f} lbs')
+    c3.metric("Average", f'{plot["Weight"].mean():.1f} lbs')
 
 st.divider()
-if st.button("💾 Save log to client", type="primary"):
+if st.button("Save log to client", type="primary"):
     cl.upsert_client(active, {"weighins": clean.to_dict("records")})
     st.success(f"Saved {len(clean)} entries for {active}.")

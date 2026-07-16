@@ -21,6 +21,9 @@ CSS = """
   --cream:#EFEDE6; --paper:#FBFAF6; --sand:#E8E4DB;
   --ink:#17150F; --muted:#78736A; --line:#DCD6C9;
   --accent:#E4531F; --accent2:#C9430F;
+  /* Functional colours for data states only — never decoration. Tuned muted
+     so they read as part of the warm palette, not neon dashboard signals. */
+  --good:#3F7A5B; --over:#B23A2E; --warn:#B07A22;
 }
 
 /* ---------- base ---------- */
@@ -34,9 +37,19 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"],
 [data-testid="stHeader"]{ background:transparent; }
 [data-testid="stMain"] .block-container{
   max-width:1180px; padding-top:2rem; padding-bottom:4rem;
-  animation:fadeup .45s ease both;
 }
 @keyframes fadeup{ from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
+/* Motion only when the visitor hasn't asked for less. */
+@media (prefers-reduced-motion: no-preference){
+  [data-testid="stMain"] .block-container{ animation:fadeup .45s ease both; }
+}
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{ animation-duration:.001ms !important;
+    animation-iteration-count:1 !important; transition-duration:.001ms !important; }
+}
+/* Visible keyboard focus — the accent ring, never removed. */
+:where(a, button, input, textarea, select, [role="button"], [tabindex]):focus-visible{
+  outline:2.5px solid var(--accent); outline-offset:2px; border-radius:6px; }
 #MainMenu, footer, [data-testid="stToolbar"]{ visibility:hidden; }
 /* ...but keep the sidebar reopen button usable. On iPad/tablet widths Streamlit
    auto-collapses the sidebar, and its only reopen control lives inside the
@@ -172,6 +185,26 @@ hr, [data-testid="stDivider"]{ border-color:var(--line); }
   letter-spacing:-.01em; margin:0 26px; }
 .marquee .track .s{ color:var(--accent); font-weight:700; }
 @keyframes scroll{ from{transform:translateX(0)} to{transform:translateX(-50%)} }
+.marquee .track{ animation-play-state:running; }
+@media (prefers-reduced-motion: reduce){ .marquee .track{ animation:none; } }
+
+/* ---------- semantic data colours (used sparingly, data only) ---------- */
+.good{ color:var(--good) !important; }
+.over{ color:var(--over) !important; }
+
+/* ---------- responsive: tablet & phone ---------- */
+@media (max-width: 900px){
+  [data-testid="stMain"] .block-container{ padding-top:1.2rem; }
+  .hero h1{ font-size:2.3rem; }
+  .hero:before{ display:none; }               /* drop the decorative arc on small screens */
+  .statrow{ gap:26px 30px; }
+  .stat .num{ font-size:1.75rem; }
+}
+@media (max-width: 560px){
+  .hero h1{ font-size:1.95rem; max-width:100%; }
+  .hero-sub{ font-size:.95rem; }
+  .statrow{ gap:20px 24px; }
+}
 </style>
 """
 

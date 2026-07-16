@@ -5,7 +5,7 @@ import streamlit as st
 import ui
 import coachlib as cl
 
-ui.setup("Training", "🏋")
+ui.setup("Training", "✳")
 ui.client_picker()
 
 ui.hero("Training.",
@@ -13,7 +13,7 @@ ui.hero("Training.",
         "(PUSH / PULL / LEGS, sets, reps, cues) as clean pages.",
         kicker="PROGRAMMING")
 
-st.info("🚧 Coming next. Your sheet has a full program library "
+st.info("Coming next. Your sheet has a full program library "
         "(TRAINING - M1..M7, PUSH/PULL/LEGS rotations with exercises, sets, "
         "reps, RIR and coaching cues). I'll wire this page to display and edit "
         "those programs — say the word and I'll pull them in.")

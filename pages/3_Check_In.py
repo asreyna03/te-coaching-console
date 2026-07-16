@@ -5,7 +5,7 @@ import streamlit as st
 import ui
 import coachlib as cl
 
-ui.setup("Check-in", "📋")
+ui.setup("Check-in", "✳")
 active = ui.client_picker()
 
 QUESTIONS = [
@@ -30,7 +30,7 @@ ui.hero("Check-in.",
         kicker="ACCOUNTABILITY")
 
 if not active:
-    st.info("👈 Pick or create a client in the sidebar first.")
+    st.info("Pick or create a client in the sidebar to run a check-in.")
     st.stop()
 
 rec = cl.get_client(active)
@@ -46,7 +46,7 @@ with st.form(f"checkin::{active}::{wk}"):
     for q in QUESTIONS:
         answers[q] = st.text_area(q, value=prev.get("answers", {}).get(q, ""),
                                   height=70)
-    submitted = st.form_submit_button("💾 Save check-in", type="primary")
+    submitted = st.form_submit_button("Save check-in", type="primary")
 
 if submitted:
     checkins[wk] = {"weight_avg": wavg, "answers": answers}

@@ -39,7 +39,7 @@ if active:
     c3.metric("TD cal target", td.get("cal", rec.get("target_cal", "—")))
     c4.metric("Weigh-ins", len(rec.get("weighins", [])))
 
-    with st.expander("✎  Edit client details"):
+    with st.expander("Edit client details"):
         with st.form("client_details"):
             a, b = st.columns(2)
             start = a.text_input("Start date", value=rec.get("start_date", ""))

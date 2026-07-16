@@ -6,7 +6,7 @@ import pandas as pd
 import ui
 import coachlib as cl
 
-ui.setup("Meal Planner", "🍽")
+ui.setup("Meal Planner", "✳")
 active = ui.client_picker()
 cats, lookup = cl.load_fooddb()
 FOODS = cl.all_food_names(cats)
@@ -18,7 +18,7 @@ ui.hero("Meal Planner.",
         kicker="NUTRITION")
 
 if not active:
-    st.info("👈 Pick or create a client in the sidebar first.")
+    st.info("Pick or create a client in the sidebar to start planning.")
     st.stop()
 
 rec = cl.get_client(active)
@@ -83,7 +83,7 @@ t_carb = t4.number_input("Carbs (g)", 0, value=int(tgt.get("carbs", 280)),
                          step=5, key=f"{plan_key}::t::carbs")
 
 if _missing_foods:
-    st.caption("⚠️ Not in the food database anymore (excluded): " +
+    st.caption("Not in the food database anymore (excluded): " +
                ", ".join(sorted(set(_missing_foods))))
 
 # ---- meals in this day ----
@@ -147,17 +147,20 @@ tk = round(res["Carbs"].sum(), 1) if not res.empty else 0
 
 ui.label("DAY TOTALS VS TARGET")
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Calories", f"{tc} / {t_cal}", f"{t_cal - tc} left")
-m2.metric("Protein", f"{tp:g} / {t_pro}g", f"{round(t_pro - tp, 1):g} left")
-m3.metric("Fats", f"{tf:g} / {t_fat}g", f"{round(t_fat - tf, 1):g} left")
-m4.metric("Carbs", f"{tk:g} / {t_carb}g", f"{round(t_carb - tk, 1):g} left")
+# delta_color="off": "left" is a remaining amount, not a trend — keep it neutral
+# rather than let Streamlit paint a misleading green up-arrow. Over/under target
+# is shown honestly by the progress bar below.
+m1.metric("Calories", f"{tc} / {t_cal}", f"{t_cal - tc} left", delta_color="off")
+m2.metric("Protein", f"{tp:g} / {t_pro}g", f"{round(t_pro - tp, 1):g} left", delta_color="off")
+m3.metric("Fats", f"{tf:g} / {t_fat}g", f"{round(t_fat - tf, 1):g} left", delta_color="off")
+m4.metric("Carbs", f"{tk:g} / {t_carb}g", f"{round(t_carb - tk, 1):g} left", delta_color="off")
 if t_cal:
     st.progress(min(tc / t_cal, 1.0), text=f"{round(100*tc/t_cal)}% of calorie target")
 
 if tc > 0:
     pc, fc, cc = tp * 4, tf * 9, tk * 4
-    st.caption(f"**Calorie split** — 🥩 Protein {round(100*pc/tc)}%  ·  "
-               f"🥑 Fats {round(100*fc/tc)}%  ·  🍚 Carbs {round(100*cc/tc)}%")
+    st.caption(f"**Calorie split** — Protein {round(100*pc/tc)}%  ·  "
+               f"Fats {round(100*fc/tc)}%  ·  Carbs {round(100*cc/tc)}%")
 
 # ---- by-meal summary (foods with grams in parentheses) ----
 if not res.empty:
@@ -172,7 +175,7 @@ if not res.empty:
 # ---- save / reset ----
 st.divider()
 b1, b2, _ = st.columns([2, 2, 5])
-if b1.button("💾 Save this plan to client", type="primary"):
+if b1.button("Save this plan to client", type="primary"):
     plan_rows = ([{"Meal": r["Meal"], "Food": r["Food"],
                    "Servings": r["Servings"], "Amount": r["Amount"]}
                   for r in rows]
@@ -181,14 +184,14 @@ if b1.button("💾 Save this plan to client", type="primary"):
     tg = rec.get("targets", {})
     tg[daytype] = {"cal": t_cal, "protein": t_pro, "fats": t_fat, "carbs": t_carb}
     cl.upsert_client(active, {"meal_plans": mp, "targets": tg})
-    st.toast(f"Saved {daytype} plan for {active} ✓")
+    st.toast(f"Saved {daytype} plan for {active}")
 
-if b2.button("↺ Reset to last saved"):
+if b2.button("Reset to last saved"):
     for k in [k for k in st.session_state if str(k).startswith(plan_key)]:
         del st.session_state[k]
     st.rerun()
 
-with st.expander("🔎 Browse the food database"):
+with st.expander("Browse the food database"):
     cat = st.selectbox("Category", cl.FOOD_CATS,
                        format_func=lambda c: f"{cl.CAT_ICON[c]} {cl.CAT_LABEL[c]}")
     df = pd.DataFrame(cats[cat])[["name", "serving", "calories", "protein",

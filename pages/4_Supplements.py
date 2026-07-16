@@ -5,7 +5,7 @@ import streamlit as st
 import ui
 import coachlib as cl
 
-ui.setup("Supplements", "💊")
+ui.setup("Supplements", "✳")
 ui.client_picker()
 supps = cl.load_supplements()
 

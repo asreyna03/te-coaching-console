@@ -5,7 +5,7 @@ import streamlit as st
 import ui
 import coachlib as cl
 
-ui.setup("Sync", "🔄")
+ui.setup("Sync", "✳")
 active = ui.client_picker()
 
 ui.hero("Sheet Sync.",
@@ -13,10 +13,10 @@ ui.hero("Sheet Sync.",
         "the app&apos;s own credentials, nothing shared with SOLARos.",
         kicker="GOOGLE SHEETS")
 
-st.markdown("#### 🗄 Food database  ·  sheet → app")
+ui.label("FOOD DATABASE  ·  SHEET → APP")
 st.caption("Re-pull Proteins / Carbs / Fats / Fruits+Veg / Drinks / Supplements "
            "from your sheet's named ranges.")
-if st.button("⬇️ Refresh food database"):
+if st.button("Refresh food database"):
     try:
         import sync
         counts = sync.pull_fooddb()
@@ -28,7 +28,7 @@ if st.button("⬇️ Refresh food database"):
         st.error(f"Sync failed: {e}")
 
 st.divider()
-st.markdown("#### 👤 Client data  ·  app ↔ sheet")
+ui.label("CLIENT DATA  ·  APP ↔ SHEET")
 st.caption("Writes to a dedicated **'APP · <name>'** tab in your sheet "
            "(readable rows + an exact data blob for lossless pull-back) — it "
            "does not overwrite your template tabs.")
@@ -38,7 +38,7 @@ with c1:
     st.markdown("**Push  ·  app → sheet**")
     if not active:
         st.info("Pick a client in the sidebar to push.")
-    elif st.button(f"⬆️ Push “{active}” to sheet", type="primary",
+    elif st.button(f"Push “{active}” to sheet", type="primary",
                    width="stretch"):
         try:
             import sync
@@ -58,7 +58,7 @@ with c2:
     if remote:
         pick = st.selectbox("Client tabs in sheet", remote,
                             label_visibility="collapsed")
-        if st.button(f"⬇️ Pull “{pick}” from sheet", width="stretch"):
+        if st.button(f"Pull “{pick}” from sheet", width="stretch"):
             try:
                 import sync
                 rec = sync.pull_client(pick)
