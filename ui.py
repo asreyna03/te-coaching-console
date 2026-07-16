@@ -38,6 +38,11 @@ html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"],
 }
 @keyframes fadeup{ from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
 #MainMenu, footer, [data-testid="stToolbar"]{ visibility:hidden; }
+/* ...but keep the sidebar reopen button usable. On iPad/tablet widths Streamlit
+   auto-collapses the sidebar, and its only reopen control lives inside the
+   toolbar we just hid — so un-hide that one button (and make it show on top). */
+[data-testid="stExpandSidebarButton"]{ visibility:visible !important; }
+[data-testid="stExpandSidebarButton"] button{ color:var(--ink) !important; }
 
 h1,h2,h3,h4{ font-family:'Archivo'; font-weight:800; letter-spacing:-.025em;
   color:var(--ink); }
@@ -209,7 +214,7 @@ def require_auth():
 
 def setup(page_title, icon="✳"):
     st.set_page_config(page_title=f"{page_title} · T&E", page_icon=icon,
-                       layout="wide")
+                       layout="wide", initial_sidebar_state="expanded")
     st.markdown(CSS, unsafe_allow_html=True)
     require_auth()
     with st.sidebar:
