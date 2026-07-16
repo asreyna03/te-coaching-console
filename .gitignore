@@ -4,3 +4,4 @@ data/clients.json
 .env
 *.env
 .streamlit/secrets.toml
+CLAUDE.md
