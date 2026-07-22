@@ -30,7 +30,9 @@ ui.hero("Check-in.",
         kicker="ACCOUNTABILITY")
 
 if not active:
-    st.info("Pick or create a client in the sidebar to run a check-in.")
+    ui.empty_state("No client selected",
+                   "Pick or create a client in the sidebar to run their weekly "
+                   "check-in.", kicker="CHECK-IN")
     st.stop()
 
 rec = cl.get_client(active)

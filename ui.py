@@ -1,9 +1,12 @@
 """Editorial design system for the T&E coaching app.
 
 Art direction: warm cream canvas, ink-black type, one hot-orange accent.
-Archivo (heavy grotesque) for display, Space Mono for [bracket] microlabels.
-Inspired by editorial fashion layouts — restrained palette, strong hierarchy,
-subtle motion. (No Inter. One accent. Moderation = quality.)
+Bricolage Grotesque (ink-trap display) for headlines and big numbers,
+Archivo for body/UI, Space Mono for [bracket] microlabels.
+Signature: the measuring-tape tick ruler under every hero — this app is
+about measurement (grams, lbs, steps, weeks). Restrained palette, strong
+hierarchy, one orchestrated load sequence. (No Inter. One accent.
+Moderation = quality.)
 """
 import sys
 from pathlib import Path
@@ -15,7 +18,7 @@ YEAR = "2026"
 
 CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,600&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,600&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Space+Mono:wght@400;700&display=swap');
 
 :root{
   --cream:#EFEDE6; --paper:#FBFAF6; --sand:#E8E4DB;
@@ -70,24 +73,43 @@ a{ color:var(--accent); text-decoration:none; border-bottom:1px solid var(--acce
 .mono.acc{ color:var(--accent); }
 
 /* ---------- hero ---------- */
-.hero{ position:relative; padding:30px 0 24px; margin-bottom:14px;
-  border-bottom:1.5px solid var(--ink); overflow:hidden; }
-.hero:before{ content:""; position:absolute; right:-140px; top:-160px;
-  width:420px; height:420px; border-radius:50%;
-  border:1px solid var(--line); box-shadow:0 0 0 34px rgba(0,0,0,0) ,
-  40px 40px 0 -1px var(--line) inset; opacity:.5; pointer-events:none; }
+/* Signature: a measuring-tape tick ruler closes every hero — minor ticks,
+   taller major ticks, ink baseline. Measurement is what this console does. */
+.hero{ position:relative; padding:30px 0 30px; margin-bottom:14px; }
+.hero:after{ content:""; position:absolute; left:0; right:0; bottom:0; height:15px;
+  pointer-events:none;
+  background:
+    repeating-linear-gradient(90deg, var(--ink) 0 1.5px, transparent 1.5px 56px),
+    repeating-linear-gradient(90deg, #B9B29F 0 1px, transparent 1px 8px),
+    linear-gradient(var(--ink), var(--ink));
+  background-size:auto 15px, auto 8px, 100% 1.5px;
+  background-position:bottom left, bottom left, bottom left;
+  background-repeat:repeat-x, repeat-x, no-repeat; }
 .hero-top{ display:flex; justify-content:space-between; align-items:center;
   margin-bottom:20px; }
-.hero h1{ font-size:3.15rem; line-height:.98; font-weight:900;
-  letter-spacing:-.035em; margin:0; max-width:15ch; }
+.hero h1{ font-family:'Bricolage Grotesque','Archivo',sans-serif;
+  font-size:clamp(2rem, 1.3rem + 3vw, 3.15rem); line-height:.98; font-weight:800;
+  letter-spacing:-.03em; margin:0; max-width:15ch; }
 .hero .ast{ color:var(--accent); font-weight:700; }
 .hero-sub{ margin-top:14px; max-width:56ch; color:#453f34; font-size:1rem;
   line-height:1.5; }
+/* One orchestrated load sequence: kicker → headline → sub → stats. */
+@media (prefers-reduced-motion: no-preference){
+  .hero .hero-top{ animation:fadeup .4s ease both; }
+  .hero h1{ animation:fadeup .5s ease .06s both; }
+  .hero-sub{ animation:fadeup .5s ease .14s both; }
+  .statrow .stat{ animation:fadeup .5s ease .2s both; }
+  .statrow .stat:nth-child(2){ animation-delay:.27s }
+  .statrow .stat:nth-child(3){ animation-delay:.34s }
+  .statrow .stat:nth-child(4){ animation-delay:.41s }
+  .statrow .stat:nth-child(5){ animation-delay:.48s }
+}
 
 /* ---------- stat row ---------- */
 .statrow{ display:flex; gap:44px; flex-wrap:wrap; margin:6px 0 4px; }
-.stat .num{ font-family:'Archivo'; font-weight:900; font-size:2.1rem;
-  letter-spacing:-.03em; line-height:1; }
+.stat .num{ font-family:'Bricolage Grotesque','Archivo',sans-serif;
+  font-weight:800; font-size:2.1rem; letter-spacing:-.02em; line-height:1;
+  font-variant-numeric:tabular-nums; }
 .stat .num .u{ color:var(--accent); }
 .stat .cap{ margin-top:6px; }
 
@@ -108,8 +130,9 @@ a{ color:var(--accent); text-decoration:none; border-bottom:1px solid var(--acce
 [data-testid="stMetricLabel"] p{ font-family:'Space Mono', monospace;
   text-transform:uppercase; letter-spacing:.09em; font-size:.66rem;
   color:var(--muted); }
-[data-testid="stMetricValue"]{ font-family:'Archivo'; font-weight:900;
-  font-size:1.7rem; letter-spacing:-.02em; }
+[data-testid="stMetricValue"]{ font-family:'Bricolage Grotesque','Archivo',sans-serif;
+  font-weight:800; font-size:1.7rem; letter-spacing:-.015em;
+  font-variant-numeric:tabular-nums; }
 [data-testid="stMetricDelta"]{ font-family:'Space Mono', monospace;
   font-size:.72rem; }
 
@@ -127,11 +150,16 @@ button[kind="primary"], [data-testid="stBaseButton-primary"],
   border-color:var(--accent); color:#fff; }
 button[kind="primary"]:hover, [data-testid="stBaseButton-primary"]:hover{
   background:var(--accent2); border-color:var(--accent2); }
+.stButton > button:active, .stDownloadButton > button:active,
+[data-testid="stFormSubmitButton"] button:active{
+  transform:translateY(0) scale(.985); }
 
 /* ---------- inputs ---------- */
 [data-baseweb="input"], [data-baseweb="select"] > div, .stTextArea textarea,
 [data-baseweb="base-input"]{ background:var(--paper) !important;
   border-radius:10px !important; }
+[data-baseweb="input"]:focus-within, [data-baseweb="select"] > div:focus-within,
+.stTextArea:focus-within textarea{ border-color:var(--accent) !important; }
 [data-testid="stWidgetLabel"] p{ font-family:'Space Mono', monospace;
   font-size:.72rem; text-transform:uppercase; letter-spacing:.06em;
   color:var(--muted); }
@@ -141,11 +169,19 @@ button[kind="primary"]:hover, [data-testid="stBaseButton-primary"]:hover{
 [data-testid="stSidebar"] .block-container{ padding-top:2.4rem; }
 [data-testid="stSidebarNav"] a span{ font-family:'Space Mono', monospace !important;
   font-size:.8rem !important; letter-spacing:.02em; }
+[data-testid="stSidebarNav"] a{ border-radius:8px;
+  transition:background .15s ease; }
+/* Current page: paper chip + accent tab, so you always know where you are. */
+[data-testid="stSidebarNav"] a[aria-current="page"]{ background:var(--paper);
+  box-shadow:inset 3px 0 0 var(--accent); }
+[data-testid="stSidebarNav"] a[aria-current="page"] span{
+  color:var(--ink) !important; font-weight:700; }
 [data-testid="stSidebar"] h3{ font-family:'Space Mono', monospace;
   font-size:.72rem; text-transform:uppercase; letter-spacing:.1em;
   color:var(--muted); font-weight:700; }
-.brandmark{ font-family:'Archivo'; font-weight:900; font-size:1.5rem;
-  letter-spacing:-.03em; line-height:1; margin-bottom:2px; }
+.brandmark{ font-family:'Bricolage Grotesque','Archivo',sans-serif;
+  font-weight:800; font-size:1.5rem; letter-spacing:-.02em; line-height:1;
+  margin-bottom:2px; }
 .brandmark .d{ color:var(--accent); }
 
 /* ---------- dataframes / editor ---------- */
@@ -181,8 +217,8 @@ hr, [data-testid="stDivider"]{ border-color:var(--line); }
   -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent); }
 .marquee .track{ display:inline-block; white-space:nowrap;
   animation:scroll 26s linear infinite; }
-.marquee .track span{ font-family:'Archivo'; font-weight:900; font-size:1.15rem;
-  letter-spacing:-.01em; margin:0 26px; }
+.marquee .track span{ font-family:'Bricolage Grotesque','Archivo',sans-serif;
+  font-weight:800; font-size:1.15rem; letter-spacing:-.01em; margin:0 26px; }
 .marquee .track .s{ color:var(--accent); font-weight:700; }
 @keyframes scroll{ from{transform:translateX(0)} to{transform:translateX(-50%)} }
 .marquee .track{ animation-play-state:running; }
@@ -192,16 +228,44 @@ hr, [data-testid="stDivider"]{ border-color:var(--line); }
 .good{ color:var(--good) !important; }
 .over{ color:var(--over) !important; }
 
+/* ---------- alerts, on-brand ---------- */
+/* st.info/success/error read as part of the paper system, not dashboard neon.
+   Kind is signalled by the left tab only. */
+[data-testid="stAlert"]{ background:var(--paper) !important;
+  border:1px solid var(--line); border-left:3px solid var(--accent);
+  border-radius:12px; }
+[data-testid="stAlert"] p{ color:var(--ink); font-size:.9rem; }
+[data-testid="stAlert"]:has([data-testid="stAlertContentSuccess"]){
+  border-left-color:var(--good); }
+[data-testid="stAlert"]:has([data-testid="stAlertContentError"]){
+  border-left-color:var(--over); }
+[data-testid="stAlert"]:has([data-testid="stAlertContentWarning"]){
+  border-left-color:var(--warn); }
+
+/* ---------- empty states ---------- */
+.empty{ border:1.5px dashed #C4BCAA; border-radius:16px;
+  padding:24px 26px 20px; margin:6px 0 4px; }
+.empty h3{ margin:8px 0 4px; }
+.empty p{ color:var(--muted); font-size:.9rem; margin:0; line-height:1.5;
+  max-width:52ch; }
+
+/* ---------- scroll progress hairline (progressive enhancement) ---------- */
+@supports (animation-timeline: scroll()){
+  [data-testid="stMain"]::before{ content:""; position:fixed; top:0; left:0;
+    width:100%; height:2.5px; background:var(--accent); z-index:9999;
+    transform-origin:0 0; transform:scaleX(0); pointer-events:none;
+    animation:growbar linear both; animation-timeline:scroll(nearest); }
+  @keyframes growbar{ to{ transform:scaleX(1) } }
+}
+
 /* ---------- responsive: tablet & phone ---------- */
 @media (max-width: 900px){
   [data-testid="stMain"] .block-container{ padding-top:1.2rem; }
-  .hero h1{ font-size:2.3rem; }
-  .hero:before{ display:none; }               /* drop the decorative arc on small screens */
   .statrow{ gap:26px 30px; }
   .stat .num{ font-size:1.75rem; }
 }
 @media (max-width: 560px){
-  .hero h1{ font-size:1.95rem; max-width:100%; }
+  .hero h1{ max-width:100%; }
   .hero-sub{ font-size:.95rem; }
   .statrow{ gap:20px 24px; }
 }
@@ -283,6 +347,13 @@ def stat_row(items):
 def card(kicker, title, body):
     return (f'<div class="card"><div class="k mono acc">[ {kicker} ]</div>'
             f'<h3>{title}</h3><p>{body}</p></div>')
+
+
+def empty_state(title, hint, kicker="NOTHING HERE YET"):
+    """A branded empty state: what's missing and what to do about it."""
+    st.markdown(
+        f'<div class="empty"><span class="mono acc">[ {kicker} ]</span>'
+        f'<h3>{title}</h3><p>{hint}</p></div>', unsafe_allow_html=True)
 
 
 def marquee(word="TRAIN & EAT", n=8):

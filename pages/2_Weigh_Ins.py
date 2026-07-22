@@ -15,7 +15,9 @@ ui.hero("Weigh-ins.",
         kicker="TRACKING")
 
 if not active:
-    st.info("Pick or create a client in the sidebar to log weigh-ins.")
+    ui.empty_state("No client selected",
+                   "Pick or create a client in the sidebar to log their "
+                   "weigh-ins.", kicker="WEIGH-INS")
     st.stop()
 
 rec = cl.get_client(active)
@@ -46,6 +48,10 @@ clean = clean[clean["Date"].astype(str).str.strip() != ""]
 
 # trend
 plot = clean.dropna(subset=["Weight"]).copy()
+if len(plot) < 2:
+    ui.empty_state("No trend yet",
+                   "Log at least two weigh-ins with a weight and the trend "
+                   "chart will draw itself here.", kicker="WEIGHT TREND")
 if len(plot) >= 2:
     ui.label("WEIGHT TREND")
     plot["Weight"] = pd.to_numeric(plot["Weight"], errors="coerce")
@@ -67,7 +73,7 @@ if len(plot) >= 2:
     chart = (chart.properties(height=300).configure_view(strokeWidth=0)
              .configure_axis(labelFont="Space Mono", titleFont="Space Mono",
                              labelFontSize=11, titleFontSize=11))
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
     delta = plot["Weight"].iloc[-1] - plot["Weight"].iloc[0]
     c1, c2, c3 = st.columns(3)
     c1.metric("Latest", f'{plot["Weight"].iloc[-1]:g} lbs')

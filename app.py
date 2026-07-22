@@ -53,7 +53,10 @@ if active:
                 st.success("Saved.")
                 st.rerun()
 else:
-    st.info("Pick or create a client in the sidebar to begin.")
+    ui.empty_state("No client selected",
+                   "Pick or create a client in the sidebar to begin — their "
+                   "details, targets and history will show up here.",
+                   kicker="ACTIVE CLIENT")
 
 st.markdown('<div class="rule"></div>', unsafe_allow_html=True)
 st.markdown('<span class="mono acc">[ WHAT&apos;S INSIDE ]</span>',

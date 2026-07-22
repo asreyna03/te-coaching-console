@@ -18,7 +18,9 @@ ui.hero("Meal Planner.",
         kicker="NUTRITION")
 
 if not active:
-    st.info("Pick or create a client in the sidebar to start planning.")
+    ui.empty_state("No client selected",
+                   "Pick or create a client in the sidebar to start planning "
+                   "their meals.", kicker="MEAL PLANNER")
     st.stop()
 
 rec = cl.get_client(active)
