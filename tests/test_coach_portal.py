@@ -236,6 +236,37 @@ def test_weighin_add_day_prefills_today_and_saves():
         _cleanup()
 
 
+def test_client_login_control_sets_and_resets():
+    """Coach console 'client login' control: a chosen password verifies and
+    is never echoed back; a blank one generates a temp shown exactly once;
+    a reset invalidates the old password."""
+    import re
+    cl.upsert_client(A, {"goals": "x"})
+    try:
+        at = AppTest.from_file(HOME, default_timeout=40)
+        at.session_state["client"] = A
+        at.run()
+        assert not at.exception
+        at.text_input(f"cl_user_{A}").set_value("portal.a")
+        at.text_input(f"cl_pw_{A}").set_value("chosen-pw-1")
+        _btn(at, f"cl_setlogin_{A}").click()
+        at.run()
+        assert cl.verify_client_login("portal.a", "chosen-pw-1") == A
+        assert "chosen-pw-1" not in _bodies(at), "typed password echoed"
+        at.text_input(f"cl_pw_{A}").set_value("")
+        _btn(at, f"cl_setlogin_{A}").click()
+        at.run()
+        succ = " ".join(str(getattr(s, "value", ""))
+                        for s in at.main.success)
+        m = re.search(r"te-[0-9a-f]{6}", succ)
+        assert m, "generated temp password not shown"
+        assert cl.verify_client_login("portal.a", m.group(0)) == A
+        assert cl.verify_client_login("portal.a", "chosen-pw-1") is None, \
+            "old password survived the reset"
+    finally:
+        _cleanup()
+
+
 def test_sync_removed_clean():
     assert not os.path.exists(os.path.join(ROOT, "pages/6_Sync.py")), \
         "Sync page still exists"

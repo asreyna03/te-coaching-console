@@ -202,6 +202,17 @@ STRINGS = {
                              "begin — their details, targets and history "
                              "will show up here."),
         "co_whats_inside": "WHAT'S INSIDE",
+        "co_login_label": "CLIENT LOGIN",
+        "co_login_current": "Active login — username `{u}`.",
+        "co_login_none": ("No login yet — set one below and share it with "
+                          "the client."),
+        "co_login_user": "Username",
+        "co_login_pw": "New password",
+        "co_login_pw_ph": "Leave empty to generate a temp one",
+        "co_login_set": "Save login",
+        "co_login_saved": "Login saved — username `{u}`.",
+        "co_login_saved_tmp": ("Login saved — username `{u}` · temp "
+                               "password `{p}` (shown only this once)."),
         "pm_bodyweight": "Bodyweight",
         "pm_td_cal": "TD cal target",
         "pm_td_protein": "TD protein",
@@ -675,6 +686,18 @@ STRINGS = {
                              "para empezar — sus datos, metas e historial "
                              "aparecerán aquí."),
         "co_whats_inside": "QUÉ HAY DENTRO",
+        "co_login_label": "ACCESO DEL CLIENTE",
+        "co_login_current": "Acceso activo — usuario `{u}`.",
+        "co_login_none": ("Aún sin acceso — crea uno abajo y compárteselo "
+                          "al cliente."),
+        "co_login_user": "Usuario",
+        "co_login_pw": "Nueva contraseña",
+        "co_login_pw_ph": "Déjala vacía para generar una temporal",
+        "co_login_set": "Guardar acceso",
+        "co_login_saved": "Acceso guardado — usuario `{u}`.",
+        "co_login_saved_tmp": ("Acceso guardado — usuario `{u}` · "
+                               "contraseña temporal `{p}` (se muestra solo "
+                               "esta vez)."),
         "pm_bodyweight": "Peso corporal",
         "pm_td_cal": "Meta cal DE",
         "pm_td_protein": "Proteína DE",

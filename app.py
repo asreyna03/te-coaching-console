@@ -475,6 +475,43 @@ if active:
                          key=f"{k}_note")
             st.form_submit_button(t("co_save_info"), type="primary",
                                   on_click=_save_client, args=(active,))
+
+        # ---- client login (set / reset) — outside the details form so a
+        # password never rides along with a profile save ------------------
+        st.markdown(f'<div class="mono acc" style="margin:16px 0 4px">'
+                    f'[ {t("co_login_label")} ]</div>',
+                    unsafe_allow_html=True)
+        lg = rec.get("login") or {}
+        if lg.get("active"):
+            st.caption(t("co_login_current", u=lg.get("username", "—")))
+        else:
+            st.caption(t("co_login_none"))
+
+        def _set_login(current):
+            u = (st.session_state.get(f"cl_user_{current}") or "").strip() \
+                or current.lower().replace(" ", ".")
+            pw = (st.session_state.get(f"cl_pw_{current}") or "").strip()
+            shown = pw or cl.generate_temp_password()
+            cl.set_client_login(current, u, shown)
+            st.session_state[f"cl_pw_{current}"] = ""
+            # echo the password only when it was generated — a typed one is
+            # already known to the coach and shouldn't be re-displayed
+            st.session_state["cd_msg"] = ("success", t(
+                "co_login_saved_tmp" if not pw else "co_login_saved",
+                u=u, p=shown))
+
+        lc1, lc2, lc3 = st.columns([0.38, 0.38, 0.24],
+                                   vertical_alignment="bottom")
+        lc1.text_input(t("co_login_user"),
+                       value=lg.get("username", "") or
+                       active.lower().replace(" ", "."),
+                       key=f"cl_user_{active}")
+        lc2.text_input(t("co_login_pw"), type="password",
+                       placeholder=t("co_login_pw_ph"),
+                       key=f"cl_pw_{active}")
+        lc3.button(t("co_login_set"), key=f"cl_setlogin_{active}",
+                   on_click=_set_login, args=(active,),
+                   use_container_width=True)
 else:
     ui.empty_state(t("co_no_client"), t("co_no_client_sub"),
                    kicker=t("co_active_client"))
