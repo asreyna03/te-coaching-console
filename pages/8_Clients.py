@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 import streamlit as st
 import ui
 import coachlib as cl
-from i18n import t
+from i18n import t, w_out
 
 ui.setup("Clients", "✳")
 ui.require_role("coach")
@@ -111,9 +111,13 @@ for name in sorted(clients):
         else:
             tone = "mut"
     goals_txt = (rec.get("goals") or "").strip()
+    _goals_es = (rec.get("goals_es") or "").strip()
+    shown_goals = ((_goals_es or goals_txt)
+                   if st.session_state.get("_lang") == "es"
+                   else (goals_txt or _goals_es))
     sheet.append({
         "name": name,
-        "goal": (goals_txt.splitlines()[0][:34] if goals_txt else "—"),
+        "goal": (shown_goals.splitlines()[0][:34] if shown_goals else "—"),
         "week": wk,
         "weeks_total": (t_raw.get("weeks_total") if has_prog else None),
         "cur_w": weights[-1] if weights else None,
@@ -161,11 +165,11 @@ for r in sheet:
     wk_cell = (f'{r["week"]}' if r["week"] else "—") + " / " + \
         (f'{r["weeks_total"]}' if r["weeks_total"] else "—")
     if r["cur_w"] is not None:
-        wt = f'{r["cur_w"]:g}'
+        wt = f'{w_out(r["cur_w"]):g}'
         if r["delta"] is not None:
             arrow = "▼" if r["delta"] < 0 else "▲"
             wt += (f' <b class="{r["tone"]}">{arrow}'
-                   f'{abs(r["delta"]):.1f}</b>')
+                   f'{w_out(abs(r["delta"])):g}</b>')
     else:
         wt = "—"
     ci_cell = {"done": _chip(t("cs_done"), "done"),
@@ -235,3 +239,37 @@ with st.container(key="clients_sheet"):
         with st.container(key=f"csrow_{i}"):
             st.button(f'Open {r["name"]}', key=f'cs_open::{r["name"]}',
                       on_click=_open_client, args=(r["name"],))
+
+# ---- coach accounts: coaches get created like clients (no Render env) ------
+st.markdown('<div class="rule"></div>', unsafe_allow_html=True)
+with st.expander(t("cu_expander")):
+    existing = cl.list_coach_users()
+    if existing:
+        st.caption(t("cu_existing") + "  " + " · ".join(
+            f"`{u}`" + ("" if r["active"] else " (off)")
+            for u, r in sorted(existing.items())))
+    else:
+        st.caption(t("cu_none"))
+
+    def _save_coach_user():
+        u = (st.session_state.get("cu_user") or "").strip().lower()
+        pw = (st.session_state.get("cu_pw") or "").strip()
+        if not u:
+            st.session_state["cu_msg"] = ("error", t("cu_user_req"))
+            return
+        shown = pw or cl.generate_temp_password()
+        cl.set_coach_user(u, shown)
+        st.session_state["cu_pw"] = ""
+        st.session_state["cu_msg"] = ("success", t(
+            "cu_saved_tmp" if not pw else "cu_saved", u=u, p=shown))
+
+    if st.session_state.get("cu_msg"):
+        _k2, _t2 = st.session_state.pop("cu_msg")
+        (st.success if _k2 == "success" else st.error)(_t2)
+    cu1, cu2, cu3 = st.columns([0.38, 0.38, 0.24],
+                               vertical_alignment="bottom")
+    cu1.text_input(t("co_login_user"), key="cu_user", placeholder="sam")
+    cu2.text_input(t("co_login_pw"), type="password", key="cu_pw",
+                   placeholder=t("co_login_pw_ph"))
+    cu3.button(t("co_login_set"), key="cu_save",
+               on_click=_save_coach_user, use_container_width=True)

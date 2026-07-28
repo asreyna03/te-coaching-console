@@ -6,7 +6,7 @@ import streamlit as st
 import pandas as pd
 import ui
 import coachlib as cl
-from i18n import t
+from i18n import t, w_out, w_in
 
 ui.setup("Weigh-ins", "✳")
 ui.require_role("coach", "client")
@@ -36,7 +36,16 @@ WI_COLS = [
     {"field": "Notes", "label": t("wi_notes"), "width": 1.9},
 ]
 table_key = f"wi::{active}"
-ui.ensure_table(table_key, WI_COLS, rec.get("weighins", []))
+_lang_now = st.session_state.get("_lang", "en")
+if st.session_state.get(f"wi_units::{active}") != _lang_now:
+    for _k in [k for k in st.session_state
+               if str(k).startswith(f"wi::{active}::")]:
+        del st.session_state[_k]
+    st.session_state[f"wi_units::{active}"] = _lang_now
+_disp_rows = [dict(r, Weight=(f"{w_out(r.get('Weight')):g}"
+                              if str(r.get("Weight", "")).strip() else ""))
+              for r in rec.get("weighins", [])]
+ui.ensure_table(table_key, WI_COLS, _disp_rows)
 
 wi_rows = ui.read_table_rows(table_key, WI_COLS)
 clean = pd.DataFrame([r for r in wi_rows if r["Date"]])
@@ -52,9 +61,11 @@ if len(plot):
 if len(plot) >= 2:
     delta = plot["Weight"].iloc[-1] - plot["Weight"].iloc[0]
     c1, c2, c3 = st.columns(3)
-    c1.metric(t("wi_latest"), f'{plot["Weight"].iloc[-1]:g} lbs')
-    c2.metric(t("wi_change"), f'{delta:+.1f} lbs')
-    c3.metric(t("wi_average"), f'{plot["Weight"].mean():.1f} lbs')
+    c1.metric(t("wi_latest"),
+              f'{plot["Weight"].iloc[-1]:g} {t("unit_w")}')
+    c2.metric(t("wi_change"), f'{delta:+.1f} {t("unit_w")}')
+    c3.metric(t("wi_average"),
+              f'{plot["Weight"].mean():.1f} {t("unit_w")}')
 
 # ---- toolbar right above the log: calendar picker + add-day (auto-today) ---
 tb1, tb2, _tsp = st.columns([0.22, 0.2, 0.58], vertical_alignment="bottom")
@@ -87,7 +98,11 @@ st.divider()
 
 def _save_log():
     rows = ui.read_table_rows(table_key, WI_COLS, require="Date")
+    for r in rows:
+        if str(r.get("Weight", "")).strip():
+            r["Weight"] = f"{w_in(r['Weight']):g}"
     cl.upsert_client(active, {"weighins": rows})
+    st.session_state.pop(f"wi_units::{active}", None)   # re-seed clean
     st.session_state[MSGK] = t("wi_saved_n", n=len(rows), name=active)
 
 

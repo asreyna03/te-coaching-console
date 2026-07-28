@@ -173,23 +173,35 @@ def test_allergy_bar_shows_hides_and_never_leaks():
         _cleanup()
 
 
-def test_supplement_cost_math_and_client_has_no_pricing():
+def test_supplements_same_grid_both_roles_and_buy_links():
+    """Coach Supplements now RENDERS THE CLIENT GRID (cost sheet parked).
+    Buy links come from coach-set URL overrides; junk text in the food-DB
+    link column never renders; no URL -> no Buy link at all."""
     _seed()
     try:
-        cl.save_settings({"currency": "S/", "supp_costs": {
-            "Creatina": {"brand": "", "qty": "1000", "daily": "10",
-                         "price": "120"}}})
         at = AppTest.from_file(SUPPS, default_timeout=40)   # coach
         at.run()
         assert not at.exception
         body = _bodies(at)
-        assert "Creatina" in body
-        assert "100" in body, "Lasts = 1000/10 = 100 missing"
-        assert "S/ 0.12" in body, "Per unit = 120/1000 missing"
-        assert "S/ 120.00" in body, "total missing"
-        # DB supplements without cost fields render dashes, no crash
-        assert "—" in body
-        # client: reference cards, zero pricing
+        assert "Dose / timing" in body, "coach grid header missing"
+        assert "Essential" in body, "essential pill missing"
+        for tok in ("Per unit", "Total stack", "COST BREAKDOWN",
+                    "Cost per day"):
+            assert tok not in body, f"parked cost grid leaked: {tok!r}"
+        # coach-only: the buy-link editor exists, with per-supplement inputs
+        slinks = [i for i in at.text_input
+                  if str(getattr(i, "key", "")).startswith("slink::")]
+        assert slinks, "buy-link editor missing for coach"
+        # set a URL override -> the grid links it; junk text never links
+        name = str(slinks[0].key).split("::", 1)[1]
+        slinks[0].set_value("https://example.com/product")
+        [b for b in at.button if b.key == "slink_save"][0].click()
+        at.run()
+        assert cl.get_settings()["supp_links"][name] == \
+            "https://example.com/product"
+        assert 'href="https://example.com/product"' in _bodies(at), \
+            "override URL not linked in the grid"
+        # client: same grid, editor absent, override link visible
         with env(APP_USERS="Eric:12345"):
             atc = AppTest.from_file(SUPPS, default_timeout=40)
             atc.session_state["_authed"] = True
@@ -197,13 +209,13 @@ def test_supplement_cost_math_and_client_has_no_pricing():
             atc.session_state["_client_self"] = A
             atc.run()
             cbody = _bodies(atc)
-            assert "S/" not in cbody, "pricing leaked to the client"
-            assert "Dose / timing" in cbody, "client grid header missing"
-            assert "Essential" in cbody, "essential pill missing"
-            for tok in ("Per unit", "Total stack", "COST BREAKDOWN",
-                        "Cost per day"):
-                assert tok not in cbody, f"cost marker {tok!r} leaked"
+            assert "Dose / timing" in cbody
+            assert not [i for i in atc.text_input
+                        if str(getattr(i, "key", "")).startswith("slink::")], \
+                "buy-link editor leaked to the client"
+            assert 'href="https://example.com/product"' in cbody
     finally:
+        cl.save_settings({"supp_links": {}})
         _cleanup()
 
 

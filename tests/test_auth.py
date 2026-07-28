@@ -246,6 +246,41 @@ def test_convert_creates_client_login_and_flips_status():
         cl.delete_application(aid)
 
 
+def test_stored_coach_account_logs_in_as_coach():
+    """Coach accounts created in-app (no env var) resolve to the coach
+    role through the login form; wrong passwords and deactivated accounts
+    never do."""
+    import coachlib as _cl
+    _cl.set_coach_user("sam", "sam-pw-1")
+    try:
+        with env(APP_PASSWORD="gate-x"):
+            at = AppTest.from_file(HOME, default_timeout=40)
+            at.run()
+            at.button[0].click()          # reveal the login form
+            at.run()
+            tin = at.text_input
+            tin[0].set_value("sam")
+            tin[1].set_value("sam-pw-1")
+            at.button[-1].click()         # the form submit
+            at.run()
+            assert at.session_state["_authed"] is True
+            assert at.session_state["_role"] == "coach"
+            assert at.session_state["_coach"] == "sam"
+            # wrong password: locked out
+            at2 = AppTest.from_file(HOME, default_timeout=40)
+            at2.run()
+            at2.button[0].click(); at2.run()
+            at2.text_input[0].set_value("sam")
+            at2.text_input[1].set_value("wrong")
+            at2.button[-1].click(); at2.run()
+            assert not ("_authed" in at2.session_state
+                        and at2.session_state["_authed"])
+        assert _cl.verify_coach_user("sam", "sam-pw-1") == "sam"
+        assert _cl.verify_coach_user("sam", "nope") is None
+    finally:
+        _cl.delete_client("_settings")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

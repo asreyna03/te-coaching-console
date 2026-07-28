@@ -668,10 +668,11 @@ a.applycta span{display:inline-block}
 .td-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px;
   padding:20px 0 4px}
 .td-stats .l{font-family:var(--mono);font-size:11px;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--ink);font-weight:700;margin-bottom:9px}
+  text-transform:uppercase;color:var(--ink);font-weight:700;margin-bottom:9px;
+  line-height:1.35;overflow-wrap:normal;word-break:keep-all}
 .td-stats .v{font-family:var(--display);font-weight:800;
   font-size:clamp(40px,5vw,52px);letter-spacing:-.02em;line-height:1;
-  color:var(--ink);font-variant-numeric:tabular-nums}
+  color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
 .td-stats .v small{font-size:16px;font-weight:600;color:var(--muted)}
 .td-stats .v.warn{color:var(--warn);font-size:32px}
 .td-stats .d{font-family:var(--mono);font-size:12px;margin-top:9px;
@@ -941,9 +942,30 @@ a.applycta span{display:inline-block}
 
 /* ---------- native chrome that Streamlit paints light --------------------
    Our own popover/expander CONTENT uses token colors, so the shells must
-   follow the theme too. BaseWeb portal popups (date calendar, select menu)
-   keep Streamlit's light skin — their text colors are baked in per-element,
-   so repainting only their panels would break contrast in dark mode. */
+   follow the theme too. BaseWeb portal popups (select menus, the date
+   calendar) render OUTSIDE the app root, and the global ink text rule DOES
+   reach them — in dark mode that left dark-on-dark, unreadable options.
+   Theme the portals explicitly: surface panel, fg text, hover state. */
+/* real DOM (verified): popover > div > … > ul > … > li[role=option] — no
+   data-baseweb="menu"/listbox hooks. The panel keeps Streamlit's cream and
+   the li's inner spans inherit the global ink (light in dark) = invisible. */
+div[data-baseweb="popover"],
+div[data-baseweb="popover"] > div,
+div[data-baseweb="popover"] ul{
+  background:var(--surface)!important}
+div[data-baseweb="popover"] ul{border:1px solid var(--line)!important}
+div[data-baseweb="popover"] li[role="option"],
+div[data-baseweb="popover"] li[role="option"] *{
+  color:var(--fg)!important;background:transparent!important}
+div[data-baseweb="popover"] li[role="option"]:hover{
+  background:var(--hover)!important}
+div[data-baseweb="popover"] li[role="option"][aria-selected="true"]{
+  background:var(--hover)!important}
+[data-baseweb="popover"] [data-baseweb="calendar"],
+[data-baseweb="calendar"]{background:var(--surface)!important}
+[data-baseweb="calendar"] *:not([aria-selected="true"]):not(svg):not(path){
+  color:var(--fg)}
+[data-baseweb="calendar"] button:hover{background:var(--hover)!important}
 .stApp{background:var(--bg)}
 /* widget text is baked to the config-theme ink — repaint it with the token
    so values stay readable when the token flips dark */
@@ -982,6 +1004,17 @@ div[data-baseweb="tooltip"]{background:var(--invert-bg)!important;
 div[data-baseweb="tooltip"], div[data-baseweb="tooltip"] *{
   color:var(--invert-fg)!important}
 div[data-baseweb="tooltip"] div{background:transparent!important}
+
+/* ---------- coach meal planner: meal blocks read as real headers -------- */
+.mp-meal-h{font-family:var(--display);font-weight:800;font-size:24px;
+  letter-spacing:-.01em;color:var(--ink);margin:26px 0 8px;
+  padding-top:14px;border-top:1px solid var(--line)}
+.mp-meal-h .br{color:var(--accent);font-weight:600}
+.st-key-mp_meals_box span[data-baseweb="tag"]{
+  padding:8px 10px!important;border-radius:5px!important}
+.st-key-mp_meals_box span[data-baseweb="tag"] span{
+  font-family:var(--display)!important;font-weight:700!important;
+  font-size:15px!important;letter-spacing:0!important}
 
 /* ================= mobile / responsive (360–430px phones) =================
    Streamlit stacks st.columns vertically below ~640px — right for content
@@ -1038,7 +1071,57 @@ div[data-baseweb="tooltip"] div{background:transparent!important}
     > [data-testid="stColumn"]:last-child{
     width:auto!important;flex:1 1 0!important;min-width:0!important}
   /* "Pendiente"/"Due" fits its stat cell in one piece */
-  .td-stats .v.warn{font-size:22px}
+  .td-stats .v.warn{font-size:24px}
+
+  /* ---- client dashboard mobile polish (te_mobile_fix mock) ----------- */
+  /* client bar: brand hard-left · spacer · [EN|ES seg · theme · avatar]
+     hard-right — no floating middle cluster */
+  [class*="st-key-te_topbar_client"]{padding:10px 0;margin-bottom:6px}
+  [class*="st-key-te_topbar_client"] .te-brand .sq{
+    width:30px;height:30px;border-radius:7px;font-size:15px}
+  .st-key-te_topbar_client > div > [data-testid="stHorizontalBlock"]
+    > [data-testid="stColumn"]:nth-child(1){flex:0 0 auto!important}
+  .st-key-te_topbar_client > div > [data-testid="stHorizontalBlock"]
+    > [data-testid="stColumn"]:nth-child(2){flex:1 1 auto!important}
+  .st-key-te_topbar_client > div > [data-testid="stHorizontalBlock"]
+    > [data-testid="stColumn"]:nth-child(3),
+  .st-key-te_topbar_client > div > [data-testid="stHorizontalBlock"]
+    > [data-testid="stColumn"]:nth-child(6){flex:0 0 auto!important}
+  /* EN|ES becomes ONE segmented pill (halves share a border), theme
+     keeps its own square beside it */
+  [class*="st-key-tb_prefs"] [data-testid="stHorizontalBlock"]{
+    gap:0!important}
+  [class*="st-key-tb_prefs"] [data-testid="stColumn"]:nth-child(3){
+    margin-left:8px}
+  [class*="st-key-tb_lang_en"] button{
+    border-radius:3px 0 0 3px!important;border-right-width:0!important}
+  [class*="st-key-tb_lang_es"] button{border-radius:0 3px 3px 0!important}
+  [class*="st-key-tb_prefs"] .stButton button{min-height:30px;height:30px}
+  [class*="st-key-te_topbar_client"] [class*="st-key-tb_avatar"]
+    [data-testid="stPopoverButton"]{
+    width:32px!important;height:32px!important;font-size:13px!important}
+  /* help + chip COLUMNS collapse (hiding just their content left the
+     empty columns flex-growing a gap into the control cluster) */
+  .st-key-te_topbar_client > div > [data-testid="stHorizontalBlock"]
+    > [data-testid="stColumn"]:nth-child(4),
+  .st-key-te_topbar_client > div > [data-testid="stHorizontalBlock"]
+    > [data-testid="stColumn"]:nth-child(5){display:none}
+  [class*="st-key-tb_theme"] button{
+    width:30px!important;min-width:30px!important;padding:0!important}
+  /* dead space above the bar: every style-injection markdown is a
+     0-height flex child that still earns the column's 1rem gap — drop
+     style-only containers from the flex flow (their CSS still applies) */
+  [data-testid="stElementContainer"]:has([data-testid="stMarkdownContainer"]
+    > style:only-child){display:none}
+  [data-testid="stMain"] .block-container{padding-top:.35rem;
+    padding-left:18px;padding-right:18px}
+  .te-hero{padding:14px 0 4px}
+  .te-hero .kicker{margin-bottom:10px}
+  .td-sub{margin-top:10px}
+  /* stat strip rhythm: 2-up, even breathing, mock value sizing */
+  .td-stats{gap:24px 16px;padding:18px 0 4px}
+  .td-stats .v{font-size:clamp(34px,10vw,44px)}
+  .td-stats .v small{font-size:15px}
   /* editable tables (weigh-ins, training builder, supplement costs):
      keep header + rows horizontal and scroll the frame sideways */
   [class*="st-key-et_box_"]{overflow-x:auto}
@@ -1060,7 +1143,7 @@ div[data-baseweb="tooltip"] div{background:transparent!important}
   .te-brand .wm{display:none}
   .te-brand::after{display:none}
   [data-testid="stMain"] .block-container{
-    padding-left:1rem;padding-right:1rem}
+    padding-left:18px;padding-right:18px}
 }
 </style>
 """
@@ -1631,14 +1714,23 @@ def _any_client_logins():
         return False
 
 
+def _any_coach_users():
+    try:
+        return any(r.get("active")
+                   for r in cl.get_settings()["coach_users"].values())
+    except Exception:
+        return False
+
+
 def login_form(key="auth_gate"):
     """One login for both roles. Username+password whenever coach users
-    (APP_USERS) or client logins exist; else the legacy single password.
-    Resolution order: coach (APP_USERS) -> client login -> legacy password
-    (any username), so the legacy coach password keeps working after client
-    accounts appear. Reruns into an unlocked session on success."""
+    (APP_USERS or stored coach accounts) or client logins exist; else the
+    legacy single password. Resolution order: coach (APP_USERS) -> stored
+    coach account -> client login -> legacy password (any username), so the
+    legacy coach password keeps working after named accounts appear.
+    Reruns into an unlocked session on success."""
     users = _configured_users()
-    two_field = bool(users) or _any_client_logins()
+    two_field = bool(users) or _any_coach_users() or _any_client_logins()
     with st.form(key):
         if two_field:
             entered_u = st.text_input("Username")
@@ -1647,6 +1739,8 @@ def login_form(key="auth_gate"):
                 match = next((name for name, pw in users.items()
                               if name.lower() == entered_u.strip().lower()
                               and pw == entered_p), None)
+                if not match:
+                    match = cl.verify_coach_user(entered_u, entered_p)
                 client_name = None if match else \
                     cl.verify_client_login(entered_u, entered_p)
                 legacy = _configured_password()

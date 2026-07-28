@@ -257,8 +257,14 @@ def get_settings():
             "supp_costs": (rec.get("supp_costs")
                            if isinstance(rec.get("supp_costs"), dict)
                            else {}),
+            "supp_links": (rec.get("supp_links")
+                           if isinstance(rec.get("supp_links"), dict)
+                           else {}),
             "coach_prefs": (rec.get("coach_prefs")
                             if isinstance(rec.get("coach_prefs"), dict)
+                            else {}),
+            "coach_users": (rec.get("coach_users")
+                            if isinstance(rec.get("coach_users"), dict)
                             else {})}
 
 
@@ -510,6 +516,46 @@ def verify_client_login(username, password):
                 _hash_pw(password, salt), expected):
             return name
     return None
+
+
+# ---------------- coach accounts (stored, not env) -----------------------------
+# The APP_USERS env var still works, but coaches can also be CREATED like
+# clients — hashed accounts in `_settings.coach_users`, no Render access
+# needed. Same PBKDF2 scheme as client logins.
+#   coach_users = {username: {"version": 1, "salt", "pw_hash", "active"}}
+COACH_USER_VERSION = 1
+
+
+def set_coach_user(username, password, active=True):
+    u = str(username or "").strip().lower()
+    if not u:
+        return None
+    salt = secrets.token_hex(16)
+    users = dict(get_settings()["coach_users"])
+    users[u] = {"version": COACH_USER_VERSION, "salt": salt,
+                "pw_hash": _hash_pw(password, salt), "active": bool(active)}
+    save_settings({"coach_users": users})
+    return u
+
+
+def verify_coach_user(username, password):
+    """Resolve stored coach credentials to a username, or None."""
+    u = str(username or "").strip().lower()
+    if not u or not password:
+        return None
+    rec = get_settings()["coach_users"].get(u) or {}
+    if not rec.get("active"):
+        return None
+    salt, expected = rec.get("salt", ""), rec.get("pw_hash", "")
+    if salt and expected and hmac.compare_digest(
+            _hash_pw(password, salt), expected):
+        return u
+    return None
+
+
+def list_coach_users():
+    return {u: {"active": bool(r.get("active"))}
+            for u, r in get_settings()["coach_users"].items()}
 
 
 # ---------------- applications (Postgres when configured, else local JSON) ----

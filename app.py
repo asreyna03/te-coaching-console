@@ -6,7 +6,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 import streamlit as st
 import ui
 import coachlib as cl
-from i18n import t
+from i18n import t, w_out
 
 authed = ui.setup("Home", soft=True)
 
@@ -79,10 +79,12 @@ def _goal_direction(goals_text):
     free-text. None => unknown, render the delta neutral."""
     t = (goals_text or "").lower()
     if any(w in t for w in ["build", "gain", "muscle", "bulk", "mass",
-                            "strength", "bigger"]):
+                            "strength", "bigger", "músculo", "musculo",
+                            "masa", "fuerza", "ganar", "volumen"]):
         return "gain"
     if any(w in t for w in ["lose", "cut", "fat", "lean", "drop", "shred",
-                            "slim", "weight loss"]):
+                            "slim", "weight loss", "grasa", "definir",
+                            "bajar", "perder", "adelgazar"]):
         return "loss"
     return None
 
@@ -109,7 +111,8 @@ def _panel_metrics(rec):
             tone = "good" if change < 0 else "over"
         else:
             tone = "neutral"
-        delta = (t("pm_since_start", arrow=arrow, n=f"{abs(change):.1f}"),
+        delta = (t("pm_since_start", arrow=arrow,
+                   n=f"{w_out(abs(change)):g}", u=t("unit_w")),
                  tone)
     td = rec.get("targets", {}).get("Training Day", {})
     cal_t = td.get("cal", rec.get("target_cal", ""))
@@ -180,10 +183,14 @@ if role == "client":
             b += 1
 
     goals_txt = (rec.get("goals") or "").strip()
-    goal_line = goals_txt.splitlines()[0][:60] if goals_txt else ""
+    _goals_es = (rec.get("goals_es") or "").strip()
+    shown_goals = ((_goals_es or goals_txt)
+                   if st.session_state.get("_lang") == "es"
+                   else (goals_txt or _goals_es))
+    goal_line = shown_goals.splitlines()[0][:60] if shown_goals else ""
     coach = (rec.get("coach") or "").strip()
     first = _html.escape(me.split()[0])
-    direction = _goal_direction(goals_txt)
+    direction = _goal_direction(goals_txt or _goals_es)
 
     # ---- hero -----------------------------------------------------------
     kick = (f"[ {t('td_kicker_week', n=week_n)} ]" if week_n
@@ -207,7 +214,8 @@ if role == "client":
     cur_w = weights[-1]["w"] if weights else \
         _pfloat((rec.get("bodyweight") or "").split()[0]
                 if rec.get("bodyweight") else None)
-    w_v = f"{cur_w:g}<small> lb</small>" if cur_w is not None else "—"
+    w_v = (f"{w_out(cur_w):g}<small> {t('unit_w')}</small>"
+           if cur_w is not None else "—")
     delta_html = ""
     if len(weights) >= 2:
         change = weights[-1]["w"] - weights[0]["w"]
@@ -218,7 +226,8 @@ if role == "client":
             tone = "good" if change < 0 else "over"
         else:
             tone = "mut"
-        delta_html = (f'<div class="d {tone}">{arrow} {abs(change):.1f} '
+        delta_html = (f'<div class="d {tone}">{arrow} '
+                      f'{w_out(abs(change)):g} '
                       f'{t("td_since_start")}</div>')
 
     tgt = rec.get("targets", {}).get("Training Day", {})
@@ -267,9 +276,10 @@ if role == "client":
         rate_cls = "g" if ((rate > 0) if direction == "gain"
                            else (rate < 0)) else "o"
     trend = "</span><span>".join([
-        (f"{t('td_weekly_avg')} <b>{wk_avg:.1f} lb</b>"
+        (f"{t('td_weekly_avg')} <b>{w_out(wk_avg):g} {t('unit_w')}</b>"
          if wk_avg is not None else f"{t('td_weekly_avg')} <b>—</b>"),
-        (f'{t("td_rate")} <b class="{rate_cls}">{rate:+.1f} lb/wk</b>'
+        (f'{t("td_rate")} <b class="{rate_cls}">'
+         f'{w_out(rate):+g} {t("unit_w_wk")}</b>'
          if rate is not None else f"{t('td_rate')} <b>—</b>"),
         (f"{t('td_steps7')} <b>{int(sum(steps7) / len(steps7)):,}</b>"
          if steps7 else f"{t('td_steps7')} <b>—</b>"),
@@ -289,8 +299,8 @@ if role == "client":
             if len(weights) >= 2:
                 import pandas as pd
                 plot = pd.DataFrame(
-                    [{"Date": e["date"].isoformat(), "Weight": e["w"]}
-                     for e in weights])
+                    [{"Date": e["date"].isoformat(),
+                      "Weight": w_out(e["w"])} for e in weights])
                 ui.weight_chart(plot, height=232)
             else:
                 st.caption(t("td_two_logs"))
@@ -302,8 +312,8 @@ if role == "client":
                                        vertical_alignment="center")
             r1a.markdown('<div class="td-ico">⚖</div>',
                          unsafe_allow_html=True)
-            last_txt = (t("td_last", w=f"{weights[-1]['w']:g}",
-                          d=(today - last_d).days)
+            last_txt = (t("td_last", w=f"{w_out(weights[-1]['w']):g}",
+                          u=t("unit_w"), d=(today - last_d).days)
                         if weights and last_d else t("td_no_logs"))
             r1b.markdown(f'<div class="td-todo-n">{t("td_log_today")}'
                          f'</div><div class="td-todo-s">{last_txt}</div>',
@@ -402,6 +412,7 @@ def _save_client(current):
 
     patch = {"start_date": v("start"), "bodyweight": v("bw"),
              "stats": v("stats"), "goals": v("goals"),
+             "goals_es": v("goals_es"),
              "contact_email": v("email"), "contact_phone": v("phone"),
              "age": v("age"), "coach": v("coach"),
              "coach_note": v("note"), "allergies": v("allergy")}
@@ -467,6 +478,8 @@ if active:
                           key=f"{k}_allergy")
             st.text_area(t("co_goals"), value=rec.get("goals", ""),
                          height=80, key=f"{k}_goals")
+            st.text_area(t("co_goals_es"), value=rec.get("goals_es", ""),
+                         height=80, key=f"{k}_goals_es")
             st.text_input(t("co_coach_field"),
                           value=rec.get("coach", ""), key=f"{k}_coach",
                           placeholder="e.g. Eric")

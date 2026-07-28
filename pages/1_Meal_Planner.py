@@ -344,15 +344,17 @@ if _missing_foods:
 ui.label(t("cp_meals_label"))
 meal_options = MEALS + [m for m in saved_by_meal if m not in MEALS]
 default_meals = [m for m in meal_options if m in saved_by_meal] or ["Meal 1"]
-meals_sel = st.multiselect("Meals", meal_options, default=default_meals,
-                           key=f"{plan_key}::meals",
-                           label_visibility="collapsed")
+with st.container(key="mp_meals_box"):     # CSS hook: bigger meal chips
+    meals_sel = st.multiselect("Meals", meal_options, default=default_meals,
+                               key=f"{plan_key}::meals",
+                               label_visibility="collapsed")
 
 # ---- per-meal builders ----
 rows = []
 for meal in [m for m in meal_options if m in meals_sel]:
-    st.markdown(f'<div class="mono ink" style="margin:18px 0 4px">'
-                f'[ {meal.upper()} ]</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="mp-meal-h"><span class="br">[</span> '
+                f'{meal.upper()} <span class="br">]</span></div>',
+                unsafe_allow_html=True)
     prev_foods = list(dict.fromkeys(
         str(r.get("Food")) for r in saved_by_meal.get(meal, [])))
     sel = st.multiselect(f"Foods in {meal}", FOODS, default=prev_foods,

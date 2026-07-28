@@ -212,6 +212,59 @@ def test_lang_pref_persists_on_the_client_record():
         _cleanup()
 
 
+def test_es_metric_units_convert_and_round_trip():
+    """ES displays kg (storage stays lb): the dashboard converts, the
+    weigh-in table shows kg and an entered kg value saves back as lb —
+    stable across repeated flips (no drift)."""
+    import i18n as _i
+    import streamlit as _st
+    WEIGH2 = os.path.join(ROOT, "pages/2_Weigh_Ins.py")
+    _seed()   # weighins: 180 lb then 179 lb
+    try:
+        with env(APP_USERS="Eric:12345"):
+            at = _client(HOME, lang="es")
+            body = _bodies(at)
+            assert "81.2" in body, \
+                "current weight (179 lb) not shown as 81.2 kg"
+            assert "kg" in body
+            # weigh-in table in kg
+            atw = _client(WEIGH2, lang="es")
+            cells = [str(getattr(i, "value", ""))
+                     for i in atw.text_input
+                     if str(getattr(i, "key", "")).endswith("::Weight")]
+            assert "81.2" in cells, f"log cells not kg: {cells}"
+            # client logs 80 kg -> stored as lb
+            first = [i for i in atw.text_input
+                     if str(getattr(i, "key", "")).endswith("::Weight")][0]
+            first.set_value("80")
+            [b for b in atw.button
+             if str(getattr(b, "key", "")).startswith("wi_save::")][0].click()
+            atw.run()
+            stored = [w["Weight"] for w in
+                      (cl.get_client(NAME).get("weighins") or [])]
+            assert "176.4" in stored, f"80 kg not stored as lb: {stored}"
+            # flip to EN: same row reads 176.4 lb; flip back: 80.0 kg — no
+            # drift on repeated conversion
+            ate = _client(WEIGH2, lang="en")
+            cells_en = [str(getattr(i, "value", ""))
+                        for i in ate.text_input
+                        if str(getattr(i, "key", "")).endswith("::Weight")]
+            assert "176.4" in cells_en, cells_en
+            ats = _client(WEIGH2, lang="es")
+            cells_es = [str(getattr(i, "value", ""))
+                        for i in ats.text_input
+                        if str(getattr(i, "key", "")).endswith("::Weight")]
+            assert "80" in cells_es, cells_es
+        # pure helper round-trip sanity
+        _st.session_state["_lang"] = "es"
+        try:
+            assert _i.w_in(_i.w_out(175.0)) == 175.0
+        finally:
+            _st.session_state.pop("_lang", None)
+    finally:
+        _cleanup()
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

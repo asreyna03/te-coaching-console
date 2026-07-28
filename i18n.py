@@ -55,7 +55,7 @@ STRINGS = {
         "peso_actual": "Current weight",
         "meta_semana": "This week's target",
         "registros": "Weigh-ins logged",
-        "checkin_semanal": "This week's check-in",
+        "checkin_semanal": "This week's check‑in",
         "td_since_start": "since start",
         "td_protein_g": "{n}g protein",
         "td_up_to_date": "✓ up to date",
@@ -73,7 +73,9 @@ STRINGS = {
         "td_two_logs": "Log two weigh-ins and your trend draws itself here.",
         "td_this_week": "This week",
         "td_log_today": "Log today's weigh-in",
-        "td_last": "Last: {w} lb · {d}d ago",
+        "td_last": "Last: {w} {u} · {d}d ago",
+        "unit_w": "lb",
+        "unit_w_wk": "lb/wk",
         "td_no_logs": "No logs yet",
         "td_log_btn": "Log",
         "td_weekly_checkin": "Weekly check-in",
@@ -137,7 +139,7 @@ STRINGS = {
         "wi_add_day": "＋ Add day",
         "wi_daily_log": "DAILY LOG",
         "wi_date": "Date",
-        "wi_weight": "Weight (lbs)",
+        "wi_weight": "Weight (lb)",
         "wi_steps": "Steps",
         "wi_sleep": "Sleep (hrs)",
         "wi_notes": "Notes",
@@ -171,6 +173,11 @@ STRINGS = {
         "sc_essential": "Essential",
         "sc_optional": "Optional",
         "sc_buy_link": "Buy →",
+        "sl_expander": "Edit buy links (one URL per supplement)",
+        "sl_cap": ("Paste the real product URL for each supplement — only "
+                   "http(s) links ever show as Buy. Empty = no Buy link."),
+        "sl_save": "Save buy links",
+        "sl_saved": "Buy links saved.",
         # -- coach console (app.py) ---------------------------------------
         "co_kicker": "COACHING CONSOLE",
         "co_foods_db": "FOODS · DATABASE",
@@ -188,7 +195,8 @@ STRINGS = {
         "co_bodyweight": "Bodyweight",
         "co_stats": "Stats",
         "co_allergies": "Allergies (comma-separated — powers the red alerts)",
-        "co_goals": "Goals",
+        "co_goals": "Goals (English)",
+        "co_goals_es": "Goals (Spanish — shown to ES clients)",
         "co_coach_field": "Coach (shown on the client's dashboard)",
         "co_note_field": ("Note to client (their dashboard's dark block — "
                           "leave empty to hide it)"),
@@ -459,6 +467,14 @@ STRINGS = {
         "cs_checkin_todo": "Check-in",
         "cs_all_good": "All good",
         "cs_open_arrow": "Open →",
+        "cu_expander": "Coach accounts (console logins for coaches)",
+        "cu_existing": "Existing coach accounts:",
+        "cu_none": ("No stored coach accounts yet — the gate password and "
+                    "APP_USERS keep working alongside these."),
+        "cu_user_req": "Give the coach a username.",
+        "cu_saved": "Coach account saved — username `{u}`.",
+        "cu_saved_tmp": ("Coach account saved — username `{u}` · temp "
+                         "password `{p}` (shown only this once)."),
         # -- applications --------------------------------------------------
         "ap_sub": ("Inbound leads from the public apply form — review them "
                    "here, then one click converts the good ones straight "
@@ -537,7 +553,7 @@ STRINGS = {
         "peso_actual": "Peso actual",
         "meta_semana": "Meta de la semana",
         "registros": "Registros",
-        "checkin_semanal": "Check-in semanal",
+        "checkin_semanal": "Check‑in semanal",
         "td_since_start": "desde el inicio",
         "td_protein_g": "{n}g de proteína",
         "td_up_to_date": "✓ al día",
@@ -555,7 +571,9 @@ STRINGS = {
         "td_two_logs": "Registra dos pesajes y tu tendencia aparecerá aquí.",
         "td_this_week": "Esta semana",
         "td_log_today": "Registra tu peso de hoy",
-        "td_last": "Último: {w} lb · hace {d}d",
+        "td_last": "Último: {w} {u} · hace {d}d",
+        "unit_w": "kg",
+        "unit_w_wk": "kg/sem",
         "td_no_logs": "Sin registros aún",
         "td_log_btn": "Registrar",
         "td_weekly_checkin": "Check-in semanal",
@@ -620,7 +638,7 @@ STRINGS = {
         "wi_add_day": "＋ Añadir día",
         "wi_daily_log": "REGISTRO DIARIO",
         "wi_date": "Fecha",
-        "wi_weight": "Peso (lbs)",
+        "wi_weight": "Peso (kg)",
         "wi_steps": "Pasos",
         "wi_sleep": "Sueño (hrs)",
         "wi_notes": "Notas",
@@ -654,6 +672,11 @@ STRINGS = {
         "sc_essential": "Esencial",
         "sc_optional": "Opcional",
         "sc_buy_link": "Comprar →",
+        "sl_expander": "Editar enlaces de compra (una URL por suplemento)",
+        "sl_cap": ("Pega la URL real de cada suplemento — solo los enlaces "
+                   "http(s) se muestran como Comprar. Vacío = sin enlace."),
+        "sl_save": "Guardar enlaces",
+        "sl_saved": "Enlaces guardados.",
         # -- coach console -------------------------------------------------
         "co_kicker": "CONSOLA DE COACHING",
         "co_foods_db": "ALIMENTOS · BASE DE DATOS",
@@ -672,7 +695,8 @@ STRINGS = {
         "co_stats": "Medidas",
         "co_allergies": ("Alergias (separadas por comas — activan las "
                          "alertas rojas)"),
-        "co_goals": "Objetivos",
+        "co_goals": "Objetivos (inglés)",
+        "co_goals_es": "Objetivos (español — se muestra a clientes en ES)",
         "co_coach_field": "Coach (se muestra en el panel del cliente)",
         "co_note_field": ("Nota para el cliente (el bloque oscuro de su "
                           "panel — déjalo vacío para ocultarlo)"),
@@ -948,6 +972,14 @@ STRINGS = {
         "cs_checkin_todo": "Check-in",
         "cs_all_good": "Todo bien",
         "cs_open_arrow": "Abrir →",
+        "cu_expander": "Cuentas de coach (accesos a la consola)",
+        "cu_existing": "Cuentas de coach existentes:",
+        "cu_none": ("Aún no hay cuentas de coach — la contraseña general y "
+                    "APP_USERS siguen funcionando junto a estas."),
+        "cu_user_req": "Ponle un usuario al coach.",
+        "cu_saved": "Cuenta guardada — usuario `{u}`.",
+        "cu_saved_tmp": ("Cuenta guardada — usuario `{u}` · contraseña "
+                         "temporal `{p}` (se muestra solo esta vez)."),
         # -- applications --------------------------------------------------
         "ap_sub": ("Solicitudes del formulario público — revísalas aquí y "
                    "con un clic convierte las buenas directo en clientes."),
@@ -1001,6 +1033,35 @@ def t(key, **fmt):
         except (KeyError, IndexError, ValueError):
             return s
     return s
+
+
+# ---------------- units (ES = metric, storage stays imperial) -------------
+LB_PER_KG = 2.2046226218
+
+
+def metric():
+    """ES sessions display/enter weights in kg; storage is ALWAYS lb."""
+    return st.session_state.get("_lang", "en") == "es"
+
+
+def w_out(lb, nd=1):
+    """Storage lb -> display units (kg in ES), rounded for display.
+    Non-numeric input passes through untouched."""
+    try:
+        v = float(str(lb).replace(",", ""))
+    except (TypeError, ValueError):
+        return lb
+    return round(v / LB_PER_KG, nd) if metric() else round(v, nd)
+
+
+def w_in(v):
+    """Entered display units -> storage lb (1 decimal — round-trips clean).
+    Non-numeric input passes through untouched."""
+    try:
+        x = float(str(v).replace(",", ""))
+    except (TypeError, ValueError):
+        return v
+    return round(x * LB_PER_KG, 1) if metric() else x
 
 
 def daytype_label(dt):
