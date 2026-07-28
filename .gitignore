@@ -1,6 +1,7 @@
 .secrets/
 __pycache__/
 data/clients.json
+data/applications.json
 .env
 *.env
 .streamlit/secrets.toml

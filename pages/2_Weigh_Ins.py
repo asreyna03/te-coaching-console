@@ -1,86 +1,95 @@
 import sys
+from datetime import date
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import streamlit as st
 import pandas as pd
-import altair as alt
 import ui
 import coachlib as cl
+from i18n import t
 
 ui.setup("Weigh-ins", "✳")
+ui.require_role("coach", "client")
 active = ui.client_picker()
 
-ui.hero("Weigh-ins.",
-        "Daily weight, steps and sleep — charted as a trend that actually reads.",
-        kicker="TRACKING")
+ui.hero(t("wi_title"), t("wi_sub"), kicker=t("wi_kicker"))
 
 if not active:
-    ui.empty_state("No client selected",
-                   "Pick or create a client in the sidebar to log their "
-                   "weigh-ins.", kicker="WEIGH-INS")
+    ui.empty_state(t("co_no_client"), t("wi_no_client_sub"),
+                   kicker=t("nav_weigh").upper())
     st.stop()
 
 rec = cl.get_client(active)
-cols = ["Date", "Weight", "Steps", "Sleep (hrs)", "Notes"]
-data = rec.get("weighins", [])
-df = pd.DataFrame(data) if data else pd.DataFrame(
-    [{"Date": "", "Weight": None, "Steps": None, "Sleep (hrs)": None, "Notes": ""}])
-for c in cols:
-    if c not in df.columns:
-        df[c] = None
-df = df[cols]
 
-ui.label("DAILY LOG")
-edited = st.data_editor(
-    df, num_rows="dynamic", width="stretch", hide_index=True,
-    column_config={
-        "Date": st.column_config.TextColumn("Date", help="e.g. 2026-07-01"),
-        "Weight": st.column_config.NumberColumn("Weight (lbs)", step=0.1, format="%.1f"),
-        "Steps": st.column_config.NumberColumn("Steps", step=100, format="%d"),
-        "Sleep (hrs)": st.column_config.NumberColumn("Sleep (hrs)", step=0.5, format="%.1f"),
-        "Notes": st.column_config.TextColumn("Notes", width="large"),
-    },
-    key=f"wi::{active}",
-)
+MSGK = "wi_msg"
+if st.session_state.get(MSGK):
+    st.success(st.session_state.pop(MSGK))
 
-clean = edited.dropna(how="all")
-clean = clean[clean["Date"].astype(str).str.strip() != ""]
+WI_COLS = [
+    {"field": "Date", "label": t("wi_date"), "width": 0.9, "mono": True,
+     "kind": "date"},
+    {"field": "Weight", "label": t("wi_weight"), "width": 0.75,
+     "mono": True},
+    {"field": "Steps", "label": t("wi_steps"), "width": 0.7, "mono": True},
+    {"field": "Sleep (hrs)", "label": t("wi_sleep"), "width": 0.75,
+     "mono": True},
+    {"field": "Notes", "label": t("wi_notes"), "width": 1.9},
+]
+table_key = f"wi::{active}"
+ui.ensure_table(table_key, WI_COLS, rec.get("weighins", []))
 
-# trend
-plot = clean.dropna(subset=["Weight"]).copy()
-if len(plot) < 2:
-    ui.empty_state("No trend yet",
-                   "Log at least two weigh-ins with a weight and the trend "
-                   "chart will draw itself here.", kicker="WEIGHT TREND")
-if len(plot) >= 2:
-    ui.label("WEIGHT TREND")
+wi_rows = ui.read_table_rows(table_key, WI_COLS)
+clean = pd.DataFrame([r for r in wi_rows if r["Date"]])
+if clean.empty:
+    clean = pd.DataFrame(columns=[c["field"] for c in WI_COLS])
+plot = clean[clean["Weight"].astype(str).str.strip() != ""].copy()
+if len(plot):
+    # rows can be newest-first (Add day prepends) — chart/stats sort by date
+    plot = plot.sort_values("Date")
     plot["Weight"] = pd.to_numeric(plot["Weight"], errors="coerce")
-    lo, hi = plot["Weight"].min(), plot["Weight"].max()
-    pad = max((hi - lo) * 0.25, 1.0)
-    # On-brand editorial chart: ink line, accent points, muted mono axes, no frame.
-    base = alt.Chart(plot).encode(
-        x=alt.X("Date:N", title=None, sort=None,
-                axis=alt.Axis(labelAngle=0, labelColor="#78736A",
-                              domainColor="#DCD6C9", tickColor="#DCD6C9")),
-        y=alt.Y("Weight:Q", title="Weight (lbs)",
-                scale=alt.Scale(domain=[lo - pad, hi + pad]),
-                axis=alt.Axis(labelColor="#78736A", titleColor="#78736A",
-                              gridColor="#E4E0D6", domainColor="#DCD6C9",
-                              tickColor="#DCD6C9")),
-        tooltip=["Date", "Weight"])
-    chart = (base.mark_line(color="#17150F", strokeWidth=2.5)
-             + base.mark_point(color="#E4531F", size=66, filled=True))
-    chart = (chart.properties(height=300).configure_view(strokeWidth=0)
-             .configure_axis(labelFont="Space Mono", titleFont="Space Mono",
-                             labelFontSize=11, titleFontSize=11))
-    st.altair_chart(chart, width="stretch")
+
+# ---- stat cards on top ------------------------------------------------------
+if len(plot) >= 2:
     delta = plot["Weight"].iloc[-1] - plot["Weight"].iloc[0]
     c1, c2, c3 = st.columns(3)
-    c1.metric("Latest", f'{plot["Weight"].iloc[-1]:g} lbs')
-    c2.metric("Change since start", f'{delta:+.1f} lbs')
-    c3.metric("Average", f'{plot["Weight"].mean():.1f} lbs')
+    c1.metric(t("wi_latest"), f'{plot["Weight"].iloc[-1]:g} lbs')
+    c2.metric(t("wi_change"), f'{delta:+.1f} lbs')
+    c3.metric(t("wi_average"), f'{plot["Weight"].mean():.1f} lbs')
+
+# ---- toolbar right above the log: calendar picker + add-day (auto-today) ---
+tb1, tb2, _tsp = st.columns([0.22, 0.2, 0.58], vertical_alignment="bottom")
+tb1.date_input(t("wi_date"), value=date.today(), key=f"wi_date::{active}")
+
+
+def _add_day():
+    d = st.session_state.get(f"wi_date::{active}") or date.today()
+    ui.add_table_row(table_key, WI_COLS, defaults={"Date": d},
+                     prepend=True)   # the new row appears just under the button
+
+
+tb2.button(t("wi_add_day"), key=f"wi_add::{active}", on_click=_add_day,
+           type="primary")
+
+ui.label(t("wi_daily_log"))
+ui.editable_table(table_key, WI_COLS,
+                  initial_rows=rec.get("weighins", []), add_label=None)
+
+# ---- weight trend below the log --------------------------------------------
+if len(plot) < 2:
+    ui.empty_state(t("wi_no_trend"), t("wi_no_trend_sub"),
+                   kicker=t("wi_trend"))
+else:
+    ui.label(t("wi_trend"))
+    ui.weight_chart(plot, height=300)
 
 st.divider()
-if st.button("Save log to client", type="primary"):
-    cl.upsert_client(active, {"weighins": clean.to_dict("records")})
-    st.success(f"Saved {len(clean)} entries for {active}.")
+
+
+def _save_log():
+    rows = ui.read_table_rows(table_key, WI_COLS, require="Date")
+    cl.upsert_client(active, {"weighins": rows})
+    st.session_state[MSGK] = t("wi_saved_n", n=len(rows), name=active)
+
+
+st.button(t("wi_save_btn"), type="primary", key=f"wi_save::{active}",
+          on_click=_save_log)

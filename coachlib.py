@@ -1,5 +1,8 @@
 """Shared data layer for the T&E coaching app."""
+import hashlib
+import hmac
 import json
+import secrets
 from pathlib import Path
 
 import db  # Postgres persistence when DATABASE_URL is set; JSON fallback otherwise
@@ -8,6 +11,7 @@ ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 FOODDB_PATH = DATA / "fooddb.json"
 CLIENTS_PATH = DATA / "clients.json"
+APPLICATIONS_PATH = DATA / "applications.json"
 
 FOOD_CATS = ["Proteins", "Carbohydrates", "Fats",
              "FruitsVegetables", "DrinksCondiments"]
@@ -147,13 +151,21 @@ def load_supplements():
 
 
 # ---------------- client store (Postgres when configured, else local JSON) ----
-def load_clients():
+def _load_clients_raw():
+    """Every record in the store, including reserved '_'-prefixed ones."""
     if db.enabled():
         return db.load_all()
     if CLIENTS_PATH.exists():
         with open(CLIENTS_PATH) as f:
             return json.load(f)
     return {}
+
+
+def load_clients():
+    """Real clients only — reserved records (e.g. '_settings') never show
+    up in rosters, pickers or dashboards."""
+    return {k: v for k, v in _load_clients_raw().items()
+            if not str(k).startswith("_")}
 
 
 def save_clients(d):
@@ -169,7 +181,7 @@ def save_clients(d):
 def get_client(name):
     if db.enabled():
         return db.get_one(name)
-    return load_clients().get(name, {})
+    return _load_clients_raw().get(name, {})
 
 
 def upsert_client(name, patch):
@@ -179,7 +191,7 @@ def upsert_client(name, patch):
     if db.enabled():
         db.save_one(name, rec)
     else:
-        clients = load_clients()
+        clients = _load_clients_raw()
         clients[name] = rec
         save_clients(clients)
     return rec
@@ -189,6 +201,329 @@ def delete_client(name):
     if db.enabled():
         db.delete_one(name)
         return
-    clients = load_clients()
+    clients = _load_clients_raw()
     clients.pop(name, None)
     save_clients(clients)
+
+
+# ---------------- app settings (reserved record, version-stamped) --------------
+SETTINGS_KEY = "_settings"
+SETTINGS_VERSION = 1
+
+
+def get_settings():
+    """Coach/app-level settings — currency + supplement costs. Tolerant of a
+    missing or older-shaped record."""
+    rec = get_client(SETTINGS_KEY) or {}
+    return {"version": SETTINGS_VERSION,
+            "currency": str(rec.get("currency") or "S/"),
+            "supp_costs": (rec.get("supp_costs")
+                           if isinstance(rec.get("supp_costs"), dict)
+                           else {}),
+            "coach_prefs": (rec.get("coach_prefs")
+                            if isinstance(rec.get("coach_prefs"), dict)
+                            else {})}
+
+
+def save_settings(patch):
+    patch = dict(patch)
+    patch["version"] = SETTINGS_VERSION
+    return upsert_client(SETTINGS_KEY, patch)
+
+
+# ---------------- computed plan grid + shopping list ---------------------------
+def plan_grid(name):
+    """The client's meal plan, fully computed: for each day type with rows,
+    meals in order with per-row serving/amount/macros, per-meal totals and a
+    day total. Foods missing from the DB degrade to zero-macro rows."""
+    rec = get_client(name) or {}
+    cats, lookup = load_fooddb()
+    out = {}
+    for daytype in ("Training Day", "Non-Training Day"):
+        rows = (rec.get("meal_plans") or {}).get(daytype) or []
+        if not rows:
+            continue
+        meals = {}
+        order = []
+        for r in rows:
+            meal = str(r.get("Meal", "") or "Meal")
+            if meal not in meals:
+                meals[meal] = []
+                order.append(meal)
+            food = str(r.get("Food", ""))
+            try:
+                amt = float(r.get("Amount") or 0)
+            except (TypeError, ValueError):
+                amt = 0.0
+            item = lookup.get(food)
+            if item:
+                kind, qty, unit = serving_info(item.get("serving", ""))
+                servings = servings_from_amount(item, amt)
+                cal, p, f, c = macros_for(lookup, food, servings)
+                meals[meal].append({
+                    "category": item.get("category", ""), "food": food,
+                    "serving": (f"{qty:g} {unit}".strip()
+                                if unit else f"{qty:g}"),
+                    "n": round(servings, 2),
+                    "amount": amount_label(item, amt),
+                    "cal": cal, "p": p, "f": f, "c": c})
+            else:
+                meals[meal].append({"category": "", "food": food,
+                                    "serving": "—", "n": 0, "amount": "—",
+                                    "cal": 0.0, "p": 0.0, "f": 0.0,
+                                    "c": 0.0})
+        day = {"meals": [], "targets": (rec.get("targets") or {})
+               .get(daytype) or {}}
+        d_cal = d_p = d_f = d_c = 0.0
+        for meal in order:
+            mrows = meals[meal]
+            t = (sum(x["cal"] for x in mrows), sum(x["p"] for x in mrows),
+                 sum(x["f"] for x in mrows), sum(x["c"] for x in mrows))
+            d_cal += t[0]; d_p += t[1]; d_f += t[2]; d_c += t[3]
+            day["meals"].append({"meal": meal, "rows": mrows, "totals": t})
+        day["totals"] = (d_cal, d_p, d_f, d_c)
+        out[daytype] = day
+    return out
+
+
+def shopping_list(name):
+    """One line per food across the whole plan (both day types, every meal —
+    the same chicken adds up), grouped by DB category. Amounts are grams/ml/
+    qty per one training + one rest day; the client scales to their week."""
+    rec = get_client(name) or {}
+    cats, lookup = load_fooddb()
+    agg = {}
+    for daytype in ("Training Day", "Non-Training Day"):
+        for r in (rec.get("meal_plans") or {}).get(daytype) or []:
+            food = str(r.get("Food", "")).strip()
+            if not food:
+                continue
+            try:
+                amt = float(r.get("Amount") or 0)
+            except (TypeError, ValueError):
+                amt = 0.0
+            item = lookup.get(food)
+            kind, unit, cat = "g", "g", "Other"
+            if item:
+                k, q, u = serving_info(item.get("serving", ""))
+                kind = k
+                unit = u or ("g" if k == "g" else "×")
+                cat = item.get("category", "Other")
+            e = agg.setdefault(food, {"amount": 0.0, "kind": kind,
+                                      "unit": unit, "category": cat})
+            e["amount"] += amt
+    grouped = {}
+    for food in sorted(agg):
+        e = agg[food]
+        if e["kind"] in ("g", "ml"):
+            label = f'{e["amount"]:g} {e["unit"]}'
+        elif e["unit"] and e["unit"] != "×":
+            label = f'{e["amount"]:g} × {e["unit"]}'
+        else:
+            label = f'{e["amount"]:g}'
+        grouped.setdefault(e["category"], []).append(
+            {"food": food, "amount": e["amount"], "label": label})
+    ordered = {c: grouped[c] for c in FOOD_CATS if c in grouped}
+    for c in grouped:
+        if c not in ordered:
+            ordered[c] = grouped[c]
+    return ordered
+
+
+# ---------------- training programs -------------------------------------------
+# Version-stamped so older/partial records are tolerated everywhere:
+#   training = {"version": 1, "block", "week", "weeks_total",
+#               "days": [{"name", "exercises": [{"exercise", "sets", "reps",
+#                                                "rir", "cue", "video"}]}]}
+TRAINING_VERSION = 1
+_EX_FIELDS = ("exercise", "sets", "reps", "rir", "cue", "video")
+
+
+def _int_or(v, default):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def default_training():
+    return {"version": TRAINING_VERSION, "block": 1, "week": 1,
+            "weeks_total": 6,
+            "days": [{"name": n, "exercises": []}
+                     for n in ("Push", "Pull", "Legs")]}
+
+
+def get_training(name):
+    """The client's program, normalized — any missing field, old shape or
+    junk value comes back as a well-formed dict (never raises)."""
+    raw = (get_client(name) or {}).get("training")
+    if not isinstance(raw, dict) or not raw.get("days"):
+        base = default_training()
+        if isinstance(raw, dict):
+            for k in ("block", "week", "weeks_total"):
+                if k in raw:
+                    base[k] = _int_or(raw[k], base[k])
+        return base
+    days = []
+    for d in raw.get("days", []):
+        if not isinstance(d, dict):
+            continue
+        exercises = []
+        for e in (d.get("exercises") or []):
+            if isinstance(e, dict):
+                exercises.append({f: str(e.get(f, "") or "")
+                                  for f in _EX_FIELDS})
+        days.append({"name": str(d.get("name") or "Day"),
+                     "exercises": exercises})
+    return {"version": TRAINING_VERSION,
+            "block": _int_or(raw.get("block"), 1),
+            "week": _int_or(raw.get("week"), 1),
+            "weeks_total": _int_or(raw.get("weeks_total"), 6),
+            "days": days or default_training()["days"]}
+
+
+def save_training(name, training):
+    """Write a program back onto the client record, version-stamped."""
+    t = dict(training)
+    t["version"] = TRAINING_VERSION
+    return upsert_client(name, {"training": t})
+
+
+def has_program(name):
+    """True when the client has a saved program with actual exercises (a
+    default empty skeleton doesn't count — used by duplicate-overwrite guard)."""
+    raw = (get_client(name) or {}).get("training") or {}
+    return any(d.get("exercises")
+               for d in raw.get("days", []) if isinstance(d, dict))
+
+
+# Per-week completion, version-stamped:
+#   training_log = {"version": 1, "log": {"<block>-<week>": {"<day>": [i,...]}}}
+TRAINING_LOG_VERSION = 1
+
+
+def get_training_log(name):
+    """{week_key: {day: sorted [exercise indexes]}} — junk-tolerant."""
+    raw = (get_client(name) or {}).get("training_log") or {}
+    log = raw.get("log") if isinstance(raw, dict) else {}
+    out = {}
+    if isinstance(log, dict):
+        for wk, days in log.items():
+            if not isinstance(days, dict):
+                continue
+            out[str(wk)] = {
+                str(d): sorted({_int_or(i, -1) for i in v
+                                if _int_or(i, -1) >= 0})
+                for d, v in days.items() if isinstance(v, (list, tuple))}
+    return out
+
+
+def set_training_done(name, week_key, day, indexes):
+    """Record which exercise indexes are done for one day of one week."""
+    log = get_training_log(name)
+    log.setdefault(str(week_key), {})[str(day)] = \
+        sorted({int(i) for i in indexes})
+    return upsert_client(name, {"training_log":
+                                {"version": TRAINING_LOG_VERSION,
+                                 "log": log}})
+
+
+# ---------------- client logins (the "client" role) ---------------------------
+# Stored on the client record, version-stamped so records without a login (or
+# with a future shape) are tolerated everywhere:
+#   login = {"version": 1, "username", "salt", "pw_hash", "active"}
+# PBKDF2-HMAC-SHA256 with a per-record random salt — plaintext is never stored.
+LOGIN_VERSION = 1
+_PW_ITERATIONS = 200_000
+
+
+def _hash_pw(password, salt_hex):
+    return hashlib.pbkdf2_hmac("sha256", str(password).encode(),
+                               bytes.fromhex(salt_hex), _PW_ITERATIONS).hex()
+
+
+def generate_temp_password():
+    """Short, shareable one-time password the coach reads out to the client."""
+    return "te-" + secrets.token_hex(3)
+
+
+def set_client_login(name, username, password, active=True):
+    """Create or replace the login on a client record."""
+    salt = secrets.token_hex(16)
+    login = {"version": LOGIN_VERSION,
+             "username": str(username or "").strip().lower(),
+             "salt": salt,
+             "pw_hash": _hash_pw(password, salt),
+             "active": bool(active)}
+    return upsert_client(name, {"login": login})
+
+
+def verify_client_login(username, password):
+    """Resolve credentials to a client name, or None. Constant-time compare;
+    inactive logins and clients without one never match."""
+    u = str(username or "").strip().lower()
+    if not u or not password:
+        return None
+    for name, rec in load_clients().items():
+        lg = rec.get("login") or {}
+        if not lg.get("active") or lg.get("username", "") != u:
+            continue
+        salt, expected = lg.get("salt", ""), lg.get("pw_hash", "")
+        if salt and expected and hmac.compare_digest(
+                _hash_pw(password, salt), expected):
+            return name
+    return None
+
+
+# ---------------- applications (Postgres when configured, else local JSON) ----
+def _load_apps_json():
+    if APPLICATIONS_PATH.exists():
+        with open(APPLICATIONS_PATH) as f:
+            return json.load(f)
+    return []
+
+
+def _save_apps_json(apps):
+    APPLICATIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(APPLICATIONS_PATH, "w") as f:
+        json.dump(apps, f, indent=2)
+
+
+def save_application(payload):
+    """Persist a new coaching application; returns the assigned id."""
+    if db.enabled():
+        return db.save_application(payload)
+    from datetime import datetime, timezone
+    apps = _load_apps_json()
+    new_id = max((a.get("id", 0) for a in apps), default=0) + 1
+    apps.append({"id": new_id, "status": "new",
+                 "submitted_at": datetime.now(timezone.utc).isoformat(),
+                 **payload})
+    _save_apps_json(apps)
+    return new_id
+
+
+def load_applications():
+    """Newest first."""
+    if db.enabled():
+        return db.load_applications()
+    return sorted(_load_apps_json(),
+                  key=lambda a: a.get("submitted_at", ""), reverse=True)
+
+
+def set_application_status(app_id, status):
+    if db.enabled():
+        db.set_application_status(app_id, status)
+        return
+    apps = _load_apps_json()
+    for a in apps:
+        if a.get("id") == app_id:
+            a["status"] = status
+    _save_apps_json(apps)
+
+
+def delete_application(app_id):
+    if db.enabled():
+        db.delete_application(app_id)
+        return
+    _save_apps_json([a for a in _load_apps_json() if a.get("id") != app_id])

@@ -42,6 +42,13 @@ def _conn():
             "  data jsonb NOT NULL DEFAULT '{}'::jsonb,"
             "  updated_at timestamptz NOT NULL DEFAULT now()"
             ");")
+        cur.execute(
+            "CREATE TABLE IF NOT EXISTS applications ("
+            "  id serial PRIMARY KEY,"
+            "  data jsonb NOT NULL DEFAULT '{}'::jsonb,"
+            "  status text NOT NULL DEFAULT 'new',"
+            "  submitted_at timestamptz NOT NULL DEFAULT now()"
+            ");")
     _cache["conn"] = c
     return c
 
@@ -73,3 +80,34 @@ def save_one(name, data):
 def delete_one(name):
     with _conn().cursor() as cur:
         cur.execute("DELETE FROM clients WHERE name = %s;", (name,))
+
+
+# ---------------- applications ----------------
+def save_application(payload):
+    from psycopg2.extras import Json
+    with _conn().cursor() as cur:
+        cur.execute(
+            "INSERT INTO applications (data) VALUES (%s) RETURNING id;",
+            (Json(payload),))
+        return cur.fetchone()[0]
+
+
+def load_applications():
+    with _conn().cursor() as cur:
+        cur.execute("SELECT id, data, status, submitted_at "
+                    "FROM applications ORDER BY submitted_at DESC;")
+        return [{"id": rid, "status": status,
+                 "submitted_at": ts.isoformat() if ts else "",
+                 **(data or {})}
+                for rid, data, status, ts in cur.fetchall()]
+
+
+def set_application_status(app_id, status):
+    with _conn().cursor() as cur:
+        cur.execute("UPDATE applications SET status = %s WHERE id = %s;",
+                    (status, app_id))
+
+
+def delete_application(app_id):
+    with _conn().cursor() as cur:
+        cur.execute("DELETE FROM applications WHERE id = %s;", (app_id,))
