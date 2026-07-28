@@ -1,13 +1,14 @@
+import json
 import sys
 from datetime import date
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import streamlit as st
-import pandas as pd
 import ui
 import coachlib as cl
-import pdfexport
 from i18n import t
+# pandas + pdfexport (fpdf) are heavy and branch-specific — imported lazily
+# in the coach section / PDF builder so the other branch never pays for them
 
 ui.setup("Meal Planner", "✳")
 role = ui.require_role("coach", "client")
@@ -212,7 +213,19 @@ if role == "client":
                                 key=f"sl::{active}::{wkid}::{it['food']}")
 
     # ---- PDF bundle (plan + training + shopping list) -------------------
-    pdf_bytes = pdfexport.build_plan_pdf(active)
+    # Building the PDF on every rerun is the page's single dearest step, so
+    # it's cached against a fingerprint of everything that prints: a saved
+    # change makes a new fingerprint -> fresh build; otherwise it's instant.
+    @st.cache_data(ttl=600, show_spinner=False)
+    def _plan_pdf(name, fingerprint):
+        import pdfexport
+        return pdfexport.build_plan_pdf(name)
+
+    _fp = json.dumps(
+        [rec.get(k) for k in ("meal_plans", "targets", "training",
+                              "plan_instructions", "bodyweight")],
+        sort_keys=True, default=str)
+    pdf_bytes = _plan_pdf(active, _fp)
     if pdf_bytes:
         st.download_button(
             t("mg_pdf"), data=pdf_bytes,
@@ -221,6 +234,8 @@ if role == "client":
     else:
         st.caption(t("mg_pdf_na"))
     st.stop()
+
+import pandas as pd   # coach-only from here down (client branch st.stop()s)
 
 ui.hero(f'{t("nav_meal")}.', t("cp_sub"), kicker=t("cp_kicker"))
 

@@ -3,7 +3,6 @@ import sys
 from datetime import date
 from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent))
-import pandas as pd
 import streamlit as st
 import ui
 import coachlib as cl
@@ -288,6 +287,7 @@ if role == "client":
             st.markdown(f'<div class="td-h3">{t("td_weight_trend")}</div>',
                         unsafe_allow_html=True)
             if len(weights) >= 2:
+                import pandas as pd
                 plot = pd.DataFrame(
                     [{"Date": e["date"].isoformat(), "Weight": e["w"]}
                      for e in weights])

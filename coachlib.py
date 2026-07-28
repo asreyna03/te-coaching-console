@@ -1,11 +1,27 @@
-"""Shared data layer for the T&E coaching app."""
+"""Shared data layer for the T&E coaching app.
+
+Caching: Streamlit re-runs the whole script on every interaction, so the
+pure readers below are wrapped in @st.cache_data — repeated reads within a
+session cost nothing instead of a Supabase round-trip each. Every write
+path clears the client-store caches (`_clear_store_caches`), so a save is
+visible on the very next rerun; the TTLs only bound staleness from writes
+that happen OUTSIDE this process (e.g. direct DB edits).
+
+Scope note: caches are keyed by the readers' arguments (get_client by
+name), and return copies — they hold exactly what the uncached call would
+return, so role isolation is unchanged (verified by the auth suite)."""
 import hashlib
 import hmac
 import json
 import secrets
 from pathlib import Path
 
+import streamlit as st
+
 import db  # Postgres persistence when DATABASE_URL is set; JSON fallback otherwise
+
+DATA_TTL = 120      # client store + applications (writes clear these anyway)
+STATIC_TTL = 3600   # the committed food-DB file
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
@@ -32,6 +48,7 @@ def _f(x):
         return 0.0
 
 
+@st.cache_data(ttl=STATIC_TTL, show_spinner=False)
 def load_fooddb():
     """Return (cats, lookup) where cats[cat]=[item...] and lookup[name]=item."""
     with open(FOODDB_PATH) as f:
@@ -136,6 +153,7 @@ def default_amount(item):
     return qty if kind in ("g", "ml") else 1.0
 
 
+@st.cache_data(ttl=STATIC_TTL, show_spinner=False)
 def load_supplements():
     with open(FOODDB_PATH) as f:
         raw = json.load(f)
@@ -151,6 +169,7 @@ def load_supplements():
 
 
 # ---------------- client store (Postgres when configured, else local JSON) ----
+@st.cache_data(ttl=DATA_TTL, show_spinner=False)
 def _load_clients_raw():
     """Every record in the store, including reserved '_'-prefixed ones."""
     if db.enabled():
@@ -161,6 +180,13 @@ def _load_clients_raw():
     return {}
 
 
+def _clear_store_caches():
+    """Every client-store write funnels through here so the next read —
+    same rerun or next — sees the saved state, never a cached one."""
+    _load_clients_raw.clear()
+    get_client.clear()
+
+
 def load_clients():
     """Real clients only — reserved records (e.g. '_settings') never show
     up in rosters, pickers or dashboards."""
@@ -169,15 +195,19 @@ def load_clients():
 
 
 def save_clients(d):
-    if db.enabled():
-        for name, rec in d.items():
-            db.save_one(name, rec)
-        return
-    CLIENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(CLIENTS_PATH, "w") as f:
-        json.dump(d, f, indent=2)
+    try:
+        if db.enabled():
+            for name, rec in d.items():
+                db.save_one(name, rec)
+            return
+        CLIENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(CLIENTS_PATH, "w") as f:
+            json.dump(d, f, indent=2)
+    finally:
+        _clear_store_caches()
 
 
+@st.cache_data(ttl=DATA_TTL, show_spinner=False)
 def get_client(name):
     if db.enabled():
         return db.get_one(name)
@@ -188,22 +218,29 @@ def upsert_client(name, patch):
     rec = get_client(name)
     rec.update(patch)
     rec.setdefault("name", name)
-    if db.enabled():
-        db.save_one(name, rec)
-    else:
-        clients = _load_clients_raw()
-        clients[name] = rec
-        save_clients(clients)
+    try:
+        if db.enabled():
+            db.save_one(name, rec)
+        else:
+            clients = _load_clients_raw()
+            clients[name] = rec
+            save_clients(clients)   # clears the caches
+            return rec
+    finally:
+        _clear_store_caches()
     return rec
 
 
 def delete_client(name):
-    if db.enabled():
-        db.delete_one(name)
-        return
-    clients = _load_clients_raw()
-    clients.pop(name, None)
-    save_clients(clients)
+    try:
+        if db.enabled():
+            db.delete_one(name)
+            return
+        clients = _load_clients_raw()
+        clients.pop(name, None)
+        save_clients(clients)       # clears the caches
+    finally:
+        _clear_store_caches()
 
 
 # ---------------- app settings (reserved record, version-stamped) --------------
@@ -491,18 +528,22 @@ def _save_apps_json(apps):
 
 def save_application(payload):
     """Persist a new coaching application; returns the assigned id."""
-    if db.enabled():
-        return db.save_application(payload)
-    from datetime import datetime, timezone
-    apps = _load_apps_json()
-    new_id = max((a.get("id", 0) for a in apps), default=0) + 1
-    apps.append({"id": new_id, "status": "new",
-                 "submitted_at": datetime.now(timezone.utc).isoformat(),
-                 **payload})
-    _save_apps_json(apps)
-    return new_id
+    try:
+        if db.enabled():
+            return db.save_application(payload)
+        from datetime import datetime, timezone
+        apps = _load_apps_json()
+        new_id = max((a.get("id", 0) for a in apps), default=0) + 1
+        apps.append({"id": new_id, "status": "new",
+                     "submitted_at": datetime.now(timezone.utc).isoformat(),
+                     **payload})
+        _save_apps_json(apps)
+        return new_id
+    finally:
+        load_applications.clear()
 
 
+@st.cache_data(ttl=DATA_TTL, show_spinner=False)
 def load_applications():
     """Newest first."""
     if db.enabled():
@@ -512,18 +553,25 @@ def load_applications():
 
 
 def set_application_status(app_id, status):
-    if db.enabled():
-        db.set_application_status(app_id, status)
-        return
-    apps = _load_apps_json()
-    for a in apps:
-        if a.get("id") == app_id:
-            a["status"] = status
-    _save_apps_json(apps)
+    try:
+        if db.enabled():
+            db.set_application_status(app_id, status)
+            return
+        apps = _load_apps_json()
+        for a in apps:
+            if a.get("id") == app_id:
+                a["status"] = status
+        _save_apps_json(apps)
+    finally:
+        load_applications.clear()
 
 
 def delete_application(app_id):
-    if db.enabled():
-        db.delete_application(app_id)
-        return
-    _save_apps_json([a for a in _load_apps_json() if a.get("id") != app_id])
+    try:
+        if db.enabled():
+            db.delete_application(app_id)
+            return
+        _save_apps_json([a for a in _load_apps_json()
+                         if a.get("id") != app_id])
+    finally:
+        load_applications.clear()

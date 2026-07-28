@@ -9,6 +9,12 @@ font = "sans serif"
 [server]
 port = 8600
 headless = true
+enableCORS = false
+# No dev file-watching in prod (local dev: streamlit run --server.fileWatcherType auto)
+fileWatcherType = "none"
 
 [browser]
 gatherUsageStats = false
+
+[runner]
+fastReruns = true
